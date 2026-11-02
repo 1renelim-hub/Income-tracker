@@ -1,0 +1,2906 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Passive Income Tracker</title>
+<style>
+:root {
+  --bg: #0a0a0c;
+  --panel: #16161a;
+  --border: #2a2a30;
+  --text: #e8e8ec;
+  --muted: #9a9aa4;
+  --accent: #34c759;
+  --accent-blue: #0a84ff;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+.wrap {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 32px 20px 60px;
+}
+
+header h1 {
+  font-size: 24px;
+  margin-bottom: 4px;
+}
+
+header .sub {
+  color: var(--muted);
+  margin-top: 0;
+  font-size: 14px;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin-top: 20px;
+}
+
+.panel h2 {
+  font-size: 16px;
+  margin-top: 0;
+  margin-bottom: 16px;
+  color: var(--text);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.field label {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.field input, .field select {
+  width: 100%;
+  background: #1f1f24;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.field input:focus, .field select:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
+#calcBtn {
+  margin-top: 20px;
+  background: var(--accent-blue);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+#calcBtn:hover {
+  background: #2b94ff;
+}
+
+.secondary-btn {
+  margin-top: 12px;
+  background: transparent;
+  color: var(--accent-blue);
+  border: 1px solid var(--accent-blue);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.secondary-btn:hover {
+  background: rgba(10, 132, 255, 0.1);
+}
+
+.row-input {
+  width: 100%;
+  background: #1f1f24;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.remove-btn {
+  background: transparent;
+  border: none;
+  color: #ff453a;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.status-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.status-none { background: rgba(255,255,255,0.08); color: var(--muted); }
+.status-ko { background: rgba(255,69,58,0.18); color: #ff6961; }
+.status-ki { background: rgba(255,159,10,0.18); color: #ff9f0a; }
+
+.quick-entry-row {
+  display: flex;
+  gap: 10px;
+}
+
+.quick-entry-row input {
+  flex: 1;
+  background: #1f1f24;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.quick-entry-row input:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-top: 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tab:hover { color: var(--text); }
+
+.tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent-blue);
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.panel-head h2 { margin: 0; }
+
+.btn-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.btn-row .secondary-btn, .btn-row #calcBtn { margin-top: 0; }
+
+.mini-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.mini-btn:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
+.mini-btn.danger:hover { border-color: #ff453a; color: #ff6961; }
+
+.muted { color: var(--muted); font-size: 11px; }
+
+td.empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 20px;
+}
+
+.flag { color: #ff9f0a; }
+
+.status-live { background: rgba(52,199,89,0.18); color: #30d158; }
+
+.calc-cell {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.segmented {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.filter-bar .seg-group { flex-wrap: wrap; }
+
+.filter-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+
+.filter-select {
+  background: #1f1f24;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 8px 12px;
+  font-size: 13px;
+  min-width: 150px;
+  cursor: pointer;
+}
+
+.filter-select:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
+.seg-label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.seg-group {
+  display: inline-flex;
+  background: #1f1f24;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.seg {
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--muted);
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.seg:hover { color: var(--text); }
+
+.seg.active {
+  background: var(--accent-blue);
+  color: #fff;
+}
+
+tbody tr:last-child { font-weight: normal; color: inherit; }
+
+#scheduleTable tbody tr:last-child { font-weight: 700; color: var(--accent); }
+
+#parseFeedback {
+  margin-top: 10px;
+  margin-bottom: 0;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background: #1f1f24;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  text-align: center;
+}
+
+.stat-card .value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.stat-card .label {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+th, td {
+  text-align: right;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+th:first-child, td:first-child, th:nth-child(2), td:nth-child(2), th:nth-child(3), td:nth-child(3) {
+  text-align: left;
+}
+
+th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+tbody tr:nth-child(even) {
+  background: rgba(255,255,255,0.02);
+}
+
+tbody tr:last-child {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+@media (max-width: 600px) {
+  .grid { grid-template-columns: 1fr; }
+  .stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ---- calendar dropdown for date fields ---- */
+.date-wrap { position: relative; display: flex; }
+.field .date-wrap input { padding-right: 42px; }
+
+.cal-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.cal-btn:hover { color: var(--accent-blue); background: rgba(10, 132, 255, 0.12); }
+
+.datepicker {
+  position: fixed;
+  z-index: 1000;
+  width: 288px;
+  background: #1c1c21;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
+
+.datepicker[hidden] { display: none; }
+
+.dp-head { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+
+.dp-nav {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dp-nav:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
+
+.dp-head select {
+  flex: 1;
+  min-width: 0;
+  background: #1f1f24;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 5px 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.dp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+
+.dp-dow { text-align: center; font-size: 11px; color: var(--muted); padding: 4px 0; }
+
+.dp-day {
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: var(--text);
+  padding: 7px 0;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.dp-day:hover { background: rgba(255, 255, 255, 0.09); }
+.dp-day.out { color: #5b5b64; }
+.dp-day.today { outline: 1px solid var(--accent-blue); outline-offset: -1px; }
+.dp-day.sel, .dp-day.sel:hover { background: var(--accent-blue); color: #fff; }
+
+.dp-foot { display: flex; justify-content: space-between; margin-top: 10px; }
+
+.dp-link { background: transparent; border: none; color: var(--accent-blue); font-size: 13px; cursor: pointer; padding: 4px 6px; }
+.dp-link:hover { text-decoration: underline; }
+
+/* ---- iPad / touch ---- */
+html { -webkit-text-size-adjust: 100%; }
+body { -webkit-tap-highlight-color: transparent; }
+button, select, input, label { touch-action: manipulation; }   /* no double-tap-to-zoom delay */
+
+/* keep content clear of rounded corners and the home indicator when installed full-screen */
+.wrap {
+  padding-left: max(20px, env(safe-area-inset-left));
+  padding-right: max(20px, env(safe-area-inset-right));
+  padding-bottom: max(60px, calc(env(safe-area-inset-bottom) + 24px));
+}
+
+/* use the extra width of a tablet: the holdings table has many columns */
+@media (min-width: 1000px) { .wrap { max-width: 1160px; } }
+
+@media (pointer: coarse) {
+  /* iOS zooms into any field whose text is smaller than 16px; this stops it */
+  input, select, textarea { font-size: 16px !important; }
+  .field input, .field select, .filter-select, .row-input, .dp-head select { min-height: 44px; }
+  .tab, .secondary-btn, #calcBtn, .seg { min-height: 44px; }
+  .secondary-btn, #calcBtn { padding: 12px 22px; }
+  .mini-btn { min-height: 40px; padding: 8px 14px; font-size: 14px; }
+  .cal-btn { width: 40px; height: 40px; }
+  .field .date-wrap input { padding-right: 54px; }
+  .datepicker { width: 320px; }
+  .dp-nav { width: 42px; height: 42px; }
+  .dp-day { padding: 12px 0; font-size: 15px; }
+  .dp-link { padding: 10px 12px; font-size: 15px; }
+}
+
+</style>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Income Tracker">
+<meta name="theme-color" content="#0a0a0c">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icon-180.png">
+<link rel="icon" type="image/png" href="./icon-192.png">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Passive Income Tracker</h1>
+    <p class="sub">Maintain your fixed coupon notes and bonds and track coupon income and yield across the whole book.</p>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="portfolio">Portfolio Summary</button>
+    <button class="tab" data-tab="editor">Add / Edit Holding</button>
+  </nav>
+
+  <div id="portfolioView">
+    <section class="panel">
+      <h2>Book Summary</h2>
+      <div class="stats" id="summaryStats"></div>
+      <p class="sub flag" id="storageNote"></p>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Holdings in Book</h2>
+        <div class="btn-row">
+          <button id="newNoteBtn" class="secondary-btn">New Note</button>
+          <button id="newBondBtn" class="secondary-btn">New Bond</button>
+          <button id="newFundBtn" class="secondary-btn">New Income Fund</button>
+          <button id="exportBtn" class="secondary-btn">Export</button>
+          <button id="importBtn" class="secondary-btn">Import</button>
+          <input type="file" id="importFile" accept="application/json,.json" hidden>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="notesTable"><thead></thead><tbody></tbody></table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>FX Rates to SGD</h2>
+      <div class="grid" id="fxRows"></div>
+      <p class="sub" id="fxNote"></p>
+    </section>
+
+    <section class="panel">
+      <h2>Income Summary</h2>
+      <div class="filter-bar">
+        <label class="filter-field">
+          <span class="seg-label">Status</span>
+          <select id="statusFilter" class="filter-select"></select>
+        </label>
+        <label class="filter-field">
+          <span class="seg-label">Bank</span>
+          <select id="bankFilter" class="filter-select"></select>
+        </label>
+        <label class="filter-field">
+          <span class="seg-label">Show in</span>
+          <select id="ccyFilter" class="filter-select"></select>
+        </label>
+      </div>
+      <div class="stats" id="incomeStats"></div>
+      <h3>By Bank</h3>
+      <div class="table-wrap">
+        <table id="incomeTable"><thead></thead><tbody></tbody></table>
+      </div>
+      <h3>By Instrument</h3>
+      <div class="table-wrap">
+        <table id="instrumentTable"><thead></thead><tbody></tbody></table>
+      </div>
+      <p class="sub" id="incomeNote"></p>
+    </section>
+  </div>
+
+  <div id="editorView" style="display:none;">
+    <section class="panel">
+      <h2>Quick Entry</h2>
+      <p class="sub" id="quickHint">Describe the holding in plain language and auto-fill the fields below. Example: 12 months USD FCN on NVDA UW, META UW via DBS - monthly coupon of 9%</p>
+      <div class="quick-entry-row">
+        <input type="text" id="quickEntry" placeholder="e.g. 12 months USD FCN on NVDA UW, META UW - monthly coupon of 9%">
+        <button id="parseBtn" class="secondary-btn">Auto-Fill</button>
+      </div>
+      <p class="sub" id="parseFeedback"></p>
+    </section>
+
+    <section class="panel">
+      <h2 id="termsTitle">Note Terms</h2>
+      <div class="grid">
+        <div class="field">
+          <label for="instrument">Instrument</label>
+          <select id="instrument">
+            <option value="FCN" selected>Fixed Coupon Note (FCN)</option>
+            <option value="BOND">Bond</option>
+            <option value="FUND">Income Fund</option>
+          </select>
+        </div>
+        <div class="field" data-inst="FCN FUND">
+          <label for="noteName" id="nameLabel">Name / reference</label>
+          <input type="text" id="noteName" placeholder="e.g. NVDA-META FCN Oct26">
+        </div>
+        <div class="field" data-inst="BOND">
+          <label for="issuer">Issuer</label>
+          <input type="text" id="issuer" placeholder="e.g. Apple Inc, US Treasury">
+        </div>
+        <div class="field">
+          <label for="ticker" id="tickerLabel">Ticker / ISIN</label>
+          <input type="text" id="ticker" placeholder="e.g. XS1234567890">
+        </div>
+        <div class="field bank-field">
+          <label for="bank">Bank</label>
+          <input type="text" id="bank" list="bankList" placeholder="e.g. DBS, UBS, Citi" autocomplete="off">
+          <datalist id="bankList"></datalist>
+        </div>
+        <div class="field" data-inst="FCN">
+          <label for="noteType">Note type</label>
+          <input type="text" id="noteType" placeholder="e.g. FCN" value="FCN">
+        </div>
+        <div class="field">
+          <label for="currency">Currency</label>
+          <input type="text" id="currency" value="USD" maxlength="3" style="text-transform:uppercase;">
+        </div>
+        <div class="field" data-inst="FCN BOND">
+          <label for="notional" id="notionalLabel">Invested amount</label>
+          <input type="number" id="notional" value="1000000" min="0" step="1000">
+        </div>
+        <div class="field" data-inst="FCN BOND">
+          <label for="couponRate">Coupon rate (percent per annum)</label>
+          <input type="number" id="couponRate" value="9" min="0" step="0.01">
+        </div>
+        <div class="field" data-inst="FUND">
+          <label for="units">Units held</label>
+          <input type="number" id="units" min="0" step="0.001" placeholder="e.g. 25662.682">
+        </div>
+        <div class="field" data-inst="FUND">
+          <label for="dividendPerUnit">Dividend per unit (per payment)</label>
+          <input type="number" id="dividendPerUnit" min="0" step="0.0001" placeholder="e.g. 0.0496">
+        </div>
+        <div class="field" data-inst="FUND">
+          <label for="investedAmount">Invested amount (optional, for yield)</label>
+          <input type="number" id="investedAmount" min="0" step="0.01" placeholder="e.g. 250000">
+        </div>
+        <div class="field">
+          <label for="frequency" id="freqLabel">Coupon frequency</label>
+          <select id="frequency">
+            <option value="1">Annual</option>
+            <option value="2">Semi-annual</option>
+            <option value="4">Quarterly</option>
+            <option value="12" selected>Monthly</option>
+          </select>
+        </div>
+        <div class="field" data-inst="FCN">
+          <label for="tenor">Tenor (months)</label>
+          <input type="number" id="tenor" value="12" min="1" step="1">
+        </div>
+        <div class="field">
+          <label for="issueDate" id="issueLabel">Issue date</label>
+          <div class="date-wrap">
+            <input type="text" id="issueDate" class="date-input" placeholder="dd/mm/yyyy" inputmode="numeric" maxlength="10" autocomplete="off">
+            <button type="button" class="cal-btn" data-for="issueDate" aria-label="Choose date from calendar" title="Choose date"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg></button>
+          </div>
+        </div>
+        <div class="field" data-inst="BOND">
+          <label for="maturityDate">Maturity date</label>
+          <div class="date-wrap">
+            <input type="text" id="maturityDate" class="date-input" placeholder="dd/mm/yyyy" inputmode="numeric" maxlength="10" autocomplete="off">
+            <button type="button" class="cal-btn" data-for="maturityDate" aria-label="Choose date from calendar" title="Choose date"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg></button>
+          </div>
+        </div>
+        <div class="field" data-inst="BOND FUND">
+          <label for="terminateDate" id="terminateLabel">Early termination date (optional)</label>
+          <div class="date-wrap">
+            <input type="text" id="terminateDate" class="date-input" placeholder="dd/mm/yyyy" inputmode="numeric" maxlength="10" autocomplete="off">
+            <button type="button" class="cal-btn" data-for="terminateDate" aria-label="Choose date from calendar" title="Choose date"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg></button>
+          </div>
+        </div>
+        <div class="field" data-inst="FCN">
+          <label for="dayCount">Day count convention</label>
+          <select id="dayCount">
+            <option value="30/360" selected>30/360</option>
+            <option value="ACT/360">ACT/360</option>
+            <option value="ACT/365">ACT/365</option>
+          </select>
+        </div>
+        <div class="field" data-inst="FCN">
+          <label for="redemption">Redemption (percent of par)</label>
+          <input type="number" id="redemption" value="100" min="0" step="0.1">
+        </div>
+        <div class="field" data-inst="FCN">
+          <label for="issuePrice">Issue price (percent of par)</label>
+          <input type="number" id="issuePrice" value="100" min="0" step="0.1">
+        </div>
+        <div class="field" data-inst="FCN">
+          <label for="purchasePrice">Purchase price (percent of par)</label>
+          <input type="number" id="purchasePrice" value="100" min="0" step="0.1">
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" data-inst="FCN">
+      <h2>Underlying Basket</h2>
+      <p class="sub">Enter each underlying's initial fixing price. Strike, KO and KI prices below are derived from the barrier levels (set in the next panel) applied to that fixing — they update as you type.</p>
+      <div class="table-wrap">
+        <table id="underlyingTable">
+          <thead>
+            <tr><th>Ticker</th><th>Initial Fixing Price</th><th>Strike Price</th><th>KO Price</th><th>KI Price</th><th></th></tr>
+          </thead>
+          <tbody id="underlyingRows"></tbody>
+        </table>
+      </div>
+      <button id="addUnderlyingBtn" class="secondary-btn">Add Underlying</button>
+    </section>
+
+    <section class="panel" data-inst="FCN">
+      <h2>Barrier / Trigger Levels</h2>
+      <div class="grid">
+        <div class="field">
+          <label for="strikeLevel">Strike level (percent of initial)</label>
+          <input type="number" id="strikeLevel" value="100" min="0" step="0.1">
+        </div>
+        <div class="field">
+          <label for="koLevel">Knock-out (KO) level (percent of initial)</label>
+          <input type="number" id="koLevel" value="105" min="0" step="0.1">
+        </div>
+        <div class="field">
+          <label for="kiLevel">Knock-in (KI) level (percent of initial)</label>
+          <input type="number" id="kiLevel" value="70" min="0" step="0.1">
+        </div>
+        <div class="field">
+          <label for="koDate">Knock-out observed on (leave blank if not knocked out)</label>
+          <div class="date-wrap">
+            <input type="text" id="koDate" class="date-input" placeholder="dd/mm/yyyy" inputmode="numeric" maxlength="10" autocomplete="off">
+            <button type="button" class="cal-btn" data-for="koDate" aria-label="Choose date from calendar" title="Choose date"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg></button>
+          </div>
+        </div>
+      </div>
+      <p class="sub">Setting a knock-out date terminates the note early: completed coupon periods pay in full and the broken period from the last coupon date to the KO date pays a pro-rated stub coupon.</p>
+    </section>
+
+    <section class="panel">
+      <div class="btn-row">
+        <button id="calcBtn">Calculate</button>
+        <button id="saveNoteBtn" class="secondary-btn">Save to Book</button>
+        <button id="cancelEditBtn" class="secondary-btn">Back to Portfolio</button>
+      </div>
+      <p class="sub" id="saveFeedback"></p>
+    </section>
+
+    <section class="panel" id="resultsPanel" style="display:none;">
+      <h2>Results</h2>
+      <p class="sub" id="noteSummary"></p>
+      <div class="stats" id="statsRow"></div>
+      <div id="fcnResultsBlock">
+        <h3>Underlying Basket — Trigger Prices</h3>
+        <div class="table-wrap">
+          <table id="basketResultsTable"><thead></thead><tbody></tbody></table>
+        </div>
+        <div class="stats" id="barrierStatsRow"></div>
+      </div>
+      <h3>Coupon Schedule</h3>
+      <div class="table-wrap">
+        <table id="scheduleTable"><thead></thead><tbody></tbody></table>
+      </div>
+    </section>
+  </div>
+</div>
+<div id="datePicker" class="datepicker" hidden></div>
+
+<script>
+// ---- calculator.b22.js ----
+// Core FCN math. Pure functions — no DOM access.
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+function parseDateInput(s) {
+  if (!s) return new Date();
+  const d = new Date(s + "T00:00:00");
+  return isNaN(d.getTime()) ? new Date() : d;
+}
+
+function daysBetween(d1, d2, convention) {
+  if (convention === "30/360") {
+    const y1 = d1.getFullYear(), m1 = d1.getMonth() + 1;
+    const y2 = d2.getFullYear(), m2 = d2.getMonth() + 1;
+    const day1 = Math.min(d1.getDate(), 30);
+    const day2 = Math.min(d2.getDate(), 30);
+    return (y2 - y1) * 360 + (m2 - m1) * 30 + (day2 - day1);
+  }
+  return Math.round((d2 - d1) / MS_PER_DAY);
+}
+
+function basisFor(convention) {
+  return convention === "ACT/365" ? 365 : 360;
+}
+
+function addMonths(date, months) {
+  const d = new Date(date.getTime());
+  const targetDay = d.getDate();
+  d.setMonth(d.getMonth() + months);
+  if (d.getDate() < targetDay) d.setDate(0);
+  return d;
+}
+
+function formatMoney(n) {
+  if (!isFinite(n)) return "0.00";
+  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return y + "-" + m + "-" + day;
+}
+
+// Dates are STORED as yyyy-mm-dd (unambiguous, sortable) and SHOWN as dd/mm/yyyy.
+function fmtDate(d) {
+  return String(d.getDate()).padStart(2, "0") + "/" + String(d.getMonth() + 1).padStart(2, "0") + "/" + d.getFullYear();
+}
+
+// "yyyy-mm-dd" -> "dd/mm/yyyy"; anything else is returned as it came.
+function fmtIso(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || "");
+  return m ? m[3] + "/" + m[2] + "/" + m[1] : (s || "");
+}
+
+// Reads dd/mm/yyyy (also d/m/yyyy, with - or . as separators, or yyyy-mm-dd) and
+// returns "yyyy-mm-dd", or null when the text is not a real calendar date.
+function parseDmy(text) {
+  const t = String(text == null ? "" : text).trim();
+  let y, m, d, g;
+  if ((g = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t))) { y = +g[1]; m = +g[2]; d = +g[3]; }
+  else if ((g = /^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/.exec(t))) { d = +g[1]; m = +g[2]; y = +g[3]; }
+  else return null;
+  if (y < 1900 || y > 2200) return null;
+  const dt = new Date(y, m - 1, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d) return null;
+  return y + "-" + String(m).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+}
+
+// Typing aid: digits only -> dd/mm/yyyy with slashes added as you go. Anything with
+// a separator already in it is left alone, so "3/1/2026" and "2026-01-03" still work.
+function maskDateValue(v) {
+  if (!/^\d*$/.test(v)) return v;
+  const d = v.slice(0, 8);
+  let out = d.slice(0, 2);
+  if (d.length > 2) out += "/" + d.slice(2, 4);
+  if (d.length > 4) out += "/" + d.slice(4);
+  return out;
+}
+
+function buildSchedule(note) {
+  const frequency = note.frequency || 12;
+  const monthsPerPeriod = 12 / frequency;
+  const periods = Math.max(0, Math.round((note.tenorMonths || 0) / monthsPerPeriod));
+  const basis = basisFor(note.dayCount);
+  const origin = parseDateInput(note.issueDate);
+  const rows = [];
+  let cursor = origin;
+  let cumulative = 0;
+  for (let i = 1; i <= periods; i++) {
+    const start = cursor;
+    const end = addMonths(origin, monthsPerPeriod * i);
+    const days = daysBetween(start, end, note.dayCount);
+    const payment = (note.notional || 0) * ((note.couponRate || 0) / 100) * (days / basis);
+    cumulative += payment;
+    rows.push({ n: i, start: start, end: end, days: days, payment: payment, cumulative: cumulative });
+    cursor = end;
+  }
+  return { rows: rows, periods: periods };
+}
+
+// Trigger prices are derived purely from the initial fixing and the barrier
+// levels — no live/latest price is tracked. The actual knock-out EVENT is
+// recorded manually via note.koDate (see computeNote).
+function computeBasket(note) {
+  const strikePct = note.strikeLevelPct || 0;
+  const koPct = note.koLevelPct || 0;
+  const kiPct = note.kiLevelPct || 0;
+  return (note.basket || []).map(function (u) {
+    return {
+      ticker: u.ticker,
+      initialFixing: u.initialFixing,
+      strikePrice: u.initialFixing * strikePct / 100,
+      koPrice: u.initialFixing * koPct / 100,
+      kiPrice: u.initialFixing * kiPct / 100,
+    };
+  });
+}
+
+// Single source of truth for every derived figure, used by both the
+// editor results panel and the portfolio summary.
+function computeNote(note, asOf) {
+  if (note.instrument === "BOND") return computeBond(note, asOf);
+  if (note.instrument === "FUND") return computeFund(note, asOf);
+  const today = asOf || new Date();
+  const sched = buildSchedule(note);
+  const scheduledRows = sched.rows;
+  const notional = note.notional || 0;
+  const basis = basisFor(note.dayCount);
+  const redemptionPct = note.redemptionPct == null ? 100 : note.redemptionPct;
+  const purchasePct = note.purchasePricePct == null ? 100 : note.purchasePricePct;
+  const issueDate = parseDateInput(note.issueDate);
+
+  const scheduledMaturity = scheduledRows.length ? scheduledRows[scheduledRows.length - 1].end : issueDate;
+  const scheduledTotalCoupon = scheduledRows.length ? scheduledRows[scheduledRows.length - 1].cumulative : 0;
+
+  // Knock-out: the note terminates early on koDate. Full coupon periods that
+  // completed before the KO date pay in full; the broken period from the last
+  // coupon date to the KO date pays a pro-rated (stub) coupon.
+  const koDate = note.koDate ? parseDateInput(note.koDate) : null;
+  const knockedOut = !!koDate;
+  let rows = scheduledRows;
+  let cancelledRows = [];
+  let stubCoupon = 0;
+
+  if (knockedOut) {
+    const kept = scheduledRows.filter(function (r) { return r.end <= koDate; });
+    cancelledRows = scheduledRows.filter(function (r) { return r.end > koDate; });
+    const lastEnd = kept.length ? kept[kept.length - 1].end : issueDate;
+    rows = kept.slice();
+    if (koDate > lastEnd) {
+      const days = daysBetween(lastEnd, koDate, note.dayCount);
+      stubCoupon = notional * ((note.couponRate || 0) / 100) * (days / basis);
+      rows.push({ n: kept.length + 1, start: lastEnd, end: koDate, days: days, payment: stubCoupon, cumulative: 0, isStub: true });
+    }
+    let cum = 0;
+    rows = rows.map(function (r) { cum += r.payment; return Object.assign({}, r, { cumulative: cum }); });
+  }
+
+  const totalCoupon = rows.length ? rows[rows.length - 1].cumulative : 0;
+  const annualCoupon = notional * (note.couponRate || 0) / 100;
+  const redemptionAmount = notional * redemptionPct / 100;
+  const purchaseAmount = notional * purchasePct / 100;
+  const tenorYears = (note.tenorMonths || 0) / 12;
+
+  const currentYield = purchaseAmount > 0 ? annualCoupon / purchaseAmount * 100 : 0;
+  const simpleYTM = purchaseAmount > 0 && tenorYears > 0
+    ? (annualCoupon + (redemptionAmount - purchaseAmount) / tenorYears) / purchaseAmount * 100
+    : 0;
+
+  const paid = rows.filter(function (r) { return r.end <= today; });
+  const incomeReceived = paid.reduce(function (s, r) { return s + r.payment; }, 0);
+  const nextCoupon = rows.find(function (r) { return r.end > today; }) || null;
+
+  const termDate = knockedOut ? koDate : scheduledMaturity;
+  const termYears = Math.max(0, (termDate - issueDate) / MS_PER_DAY) / 365;
+  const realizedAnnualYield = purchaseAmount > 0 && termYears > 0
+    ? ((totalCoupon + redemptionAmount - purchaseAmount) / purchaseAmount) / termYears * 100
+    : 0;
+
+  const basket = computeBasket(note);
+
+  return {
+    rows: rows,
+    scheduledRows: scheduledRows,
+    cancelledRows: cancelledRows,
+    periods: rows.length,
+    scheduledPeriods: sched.periods,
+    totalCoupon: totalCoupon,
+    scheduledTotalCoupon: scheduledTotalCoupon,
+    incomeForgone: Math.max(0, scheduledTotalCoupon - totalCoupon),
+    stubCoupon: stubCoupon,
+    annualCoupon: annualCoupon,
+    redemptionAmount: redemptionAmount,
+    purchaseAmount: purchaseAmount,
+    totalCashFlow: totalCoupon + redemptionAmount,
+    currentYield: currentYield,
+    simpleYTM: simpleYTM,
+    realizedAnnualYield: realizedAnnualYield,
+    couponPerPeriod: (note.couponRate || 0) / (note.frequency || 12),
+    couponsPaid: paid.length,
+    incomeReceived: incomeReceived,
+    incomeRemaining: totalCoupon - incomeReceived,
+    nextCoupon: nextCoupon,
+    maturityDate: scheduledMaturity,
+    termDate: termDate,
+    koDate: koDate,
+    knockedOut: knockedOut,
+    basket: basket,
+    // Latest-price tracking was removed, so the book no longer infers a
+    // breach from market level — a knock-out is only "true" once its
+    // observation date is entered on the note.
+    worstPerf: null,
+    koTriggered: knockedOut,
+    koUnrecorded: false,
+    kiTriggered: false,
+    matured: !knockedOut && scheduledRows.length > 0 && scheduledMaturity <= today,
+  };
+}
+
+
+</script>
+<script>
+// ---- bond.b18.js ----
+// Bond model: a fixed-rate coupon bond.
+//
+//   full coupon = nominal x coupon rate / frequency
+//
+//  - Coupon dates are anchored on MATURITY and stepped backwards, which is how
+//    real bonds are scheduled. Where the issue date falls part-way through a
+//    period, the first coupon is short and pro-rated.
+//  - On early termination the accrued interest up to the termination date is
+//    paid, pro-rated over that coupon period.
+//  - Pro-rating uses 30/360 day counts as a ratio of the period, so a full
+//    period always pays exactly one full coupon (no month-end rounding drift).
+//  - Principal (the nominal) comes back at maturity or on early termination.
+//    It is shown for reference but is not income.
+//  - No purchase price is tracked, so there is no YTM or yield analytics.
+//
+// Returns the same field names as computeNote so the portfolio tables,
+// currency roll-ups, income summary and upcoming list work unchanged.
+
+function bondMonthsBetween(from, to) {
+  return Math.max(0, Math.round((to - from) / MS_PER_DAY / 30.4375));
+}
+
+// The date income stops: the early termination date when it falls before maturity.
+function bondEndDate(note) {
+  const maturity = parseDateInput(note.maturityDate);
+  if (note.terminateDate) {
+    const t = parseDateInput(note.terminateDate);
+    if (t < maturity) return t;
+  }
+  return maturity;
+}
+
+function bondSchedule(note) {
+  const f = note.frequency || 2;
+  const step = 12 / f;
+  const issue = parseDateInput(note.issueDate);
+  const maturity = parseDateInput(note.maturityDate);
+  const end = bondEndDate(note);
+  const nominal = note.notional || 0;
+  const full = nominal * (note.couponRate || 0) / 100 / f;
+
+  // Regular coupon dates, walking back from maturity until one falls on or
+  // before the issue date. dates[0] is the (notional) start of the first period.
+  const dates = [];
+  for (let k = 0; k < 1200; k++) {
+    const d = addMonths(maturity, -step * k);
+    dates.push(d);
+    if (d <= issue) break;
+  }
+  dates.reverse();
+
+  const rows = [];
+  let cumulative = 0;
+  for (let j = 1; j < dates.length; j++) {
+    const pStart = dates[j - 1], pEnd = dates[j];
+    if (pStart >= end) break;
+    const accStart = pStart > issue ? pStart : issue;
+    const accEnd = pEnd < end ? pEnd : end;
+    if (accEnd <= accStart) continue;
+    const ratio = daysBetween(accStart, accEnd, "30/360") / daysBetween(pStart, pEnd, "30/360");
+    const payment = full * ratio;
+    cumulative += payment;
+    rows.push({
+      n: rows.length + 1, start: accStart, end: accEnd,
+      days: Math.round((accEnd - accStart) / MS_PER_DAY),
+      payment: payment, cumulative: cumulative,
+      isStub: Math.abs(ratio - 1) > 1e-9, stubLabel: "Part-period",
+    });
+  }
+  return { rows: rows, issue: issue, maturity: maturity, end: end, full: full, nominal: nominal };
+}
+
+function computeBond(note, asOf) {
+  const today = asOf || new Date();
+  const s = bondSchedule(note);
+  const rows = s.rows;
+  const totalIncome = rows.length ? rows[rows.length - 1].cumulative : 0;
+  const paid = rows.filter(function (r) { return r.end <= today; });
+  const incomeReceived = paid.reduce(function (acc, r) { return acc + r.payment; }, 0);
+  const annual = s.nominal * (note.couponRate || 0) / 100;
+  const terminated = !!note.terminateDate && s.end < s.maturity;
+
+  return {
+    rows: rows, scheduledRows: rows, cancelledRows: [],
+    periods: rows.length, scheduledPeriods: rows.length,
+    totalCoupon: totalIncome, scheduledTotalCoupon: totalIncome,
+    incomeForgone: 0, stubCoupon: 0,
+    annualCoupon: annual,
+    couponAmount: s.full, couponPerPeriod: s.full,
+    // Principal comes back at the end date; no price is tracked, so cost is
+    // not known and the yield-based figures are not shown for bonds.
+    redemptionAmount: s.nominal, purchaseAmount: 0,
+    accrued: 0, dirtyAmount: 0,
+    totalCashFlow: totalIncome + s.nominal, capitalGain: 0,
+    currentYield: 0, ytmPct: null, simpleYTM: 0, realizedAnnualYield: 0,
+    macaulay: null, modified: null,
+    yearsToMaturity: Math.max(0, (s.end - s.issue) / MS_PER_DAY / 365.25),
+    couponsPaid: paid.length,
+    incomeReceived: incomeReceived,
+    incomeRemaining: totalIncome - incomeReceived,
+    nextCoupon: rows.find(function (r) { return r.end > today; }) || null,
+    maturityDate: s.end, termDate: s.end, scheduledMaturity: s.maturity,
+    koDate: null, knockedOut: false,
+    terminated: terminated,
+    basket: [], worstPerf: null,
+    koTriggered: false, koUnrecorded: false, kiTriggered: false,
+    matured: s.end <= today,
+  };
+}
+
+</script>
+<script>
+// ---- fund.b21.js ----
+// Income fund model: a holding of units that pays a distribution per unit.
+//
+//   dividend per payment = units x dividend per unit
+//
+//  - A fund has no maturity, so income is projected 12 months ahead of today
+//    (or up to the sell date, if one is set). Outstanding and lifetime income
+//    therefore mean "the next 12 months", not a contractual total.
+//  - Distributions are not guaranteed and change from month to month. Every
+//    payment, past and future, is calculated at the dividend per unit entered,
+//    so "received to date" is an ESTIMATE, not a statement of cash received.
+//  - Payments fall on the last day of the month. The first payment is the
+//    first month-end after the purchase date. Payments dated on or before the
+//    sell date are kept.
+//  - Invested amount is optional. With it the fund has a cost base and a yield
+//    on that amount (annual dividends / invested amount); without it the yield
+//    is unknown and the fund adds 0 to the Invested Amount totals.
+//
+// Returns the same field names as computeNote / computeBond so the portfolio
+// tables, currency roll-ups and income summary work unchanged.
+
+function endOfMonth(y, m) { return new Date(y, m + 1, 0); }
+
+function fundSchedule(note, today) {
+  const f = note.frequency || 12;
+  const step = 12 / f;
+  const units = note.units || 0;
+  const perUnit = note.dividendPerUnit || 0;
+  const amount = units * perUnit;
+
+  const buy = parseDateInput(note.issueDate);
+  const sell = note.terminateDate ? parseDateInput(note.terminateDate) : null;
+  // Project the next 12 months of month-ends. If today IS a month-end, that
+  // payment already counts as paid, so the window starts the month after.
+  let uy = today.getFullYear(), um = today.getMonth();
+  if (endOfMonth(uy, um) <= today) um += 1;
+  const horizon = endOfMonth(uy, um + 11);
+  const stop = sell && sell < horizon ? sell : horizon;
+
+  // First payment: the first month-end strictly after the purchase date.
+  let y = buy.getFullYear(), m = buy.getMonth();
+  if (endOfMonth(y, m) <= buy) m += 1;
+
+  const rows = [];
+  let cumulative = 0;
+  let prev = buy;
+  for (let k = 0; k < 1200; k++) {
+    const d = endOfMonth(y, m + step * k);
+    if (d > stop) break;
+    cumulative += amount;
+    rows.push({ n: k + 1, start: prev, end: d, days: Math.round((d - prev) / MS_PER_DAY),
+      payment: amount, cumulative: cumulative, units: units, perUnit: perUnit });
+    prev = d;
+  }
+  return { rows: rows, amount: amount, buy: buy, sell: sell, horizon: horizon, stop: stop, f: f };
+}
+
+function computeFund(note, asOf) {
+  const today = asOf || new Date();
+  const s = fundSchedule(note, today);
+  const rows = s.rows;
+  const total = rows.length ? rows[rows.length - 1].cumulative : 0;
+  const paid = rows.filter(function (r) { return r.end <= today; });
+  const received = paid.reduce(function (acc, r) { return acc + r.payment; }, 0);
+  const annual = (note.units || 0) * (note.dividendPerUnit || 0) * s.f;
+  // Older saved funds stored a NAV per unit instead; their cost base was units x NAV.
+  const invested = note.investedAmount != null ? note.investedAmount : (note.units || 0) * (note.navPerUnit || 0);
+  const sold = !!s.sell && s.sell <= today;
+
+  return {
+    isFund: true, projected: true, openEnded: !s.sell, hasInvested: invested > 0,
+    rows: rows, scheduledRows: rows, cancelledRows: [],
+    periods: rows.length, scheduledPeriods: rows.length,
+    totalCoupon: total, scheduledTotalCoupon: total,
+    incomeForgone: 0, stubCoupon: 0,
+    annualCoupon: annual,
+    couponAmount: s.amount, couponPerPeriod: s.amount,
+    monthlyAverage: annual / 12,
+    redemptionAmount: 0, purchaseAmount: invested, investedAmount: invested,
+    accrued: 0, dirtyAmount: 0, totalCashFlow: total, capitalGain: 0,
+    currentYield: invested > 0 ? annual / invested * 100 : 0,
+    ytmPct: null, simpleYTM: 0, realizedAnnualYield: 0, macaulay: null, modified: null,
+    yearsToMaturity: 0,
+    couponsPaid: paid.length,
+    incomeReceived: received,
+    incomeRemaining: total - received,
+    nextCoupon: rows.find(function (r) { return r.end > today; }) || null,
+    maturityDate: s.stop, termDate: s.stop, sellDate: s.sell,
+    koDate: null, knockedOut: false, terminated: sold,
+    basket: [], worstPerf: null,
+    koTriggered: false, koUnrecorded: false, kiTriggered: false,
+    matured: sold,
+  };
+}
+
+</script>
+<script>
+// ---- portfolio.b22.js ----
+// Book storage and portfolio-level rendering.
+
+const STORAGE_KEY = "fcn_tracker_notes_v1";
+const FX_KEY = "fcn_tracker_fx_v1";
+
+// SGD per 1 unit of currency. Seeded from mid-market rates on 2026-10-30;
+// edit them in the FX panel — they are assumptions, not a live feed.
+const DEFAULT_FX = { SGD: 1, USD: 1.2805, EUR: 1.4280, HKD: 0.1633, JPY: 0.0081 };
+const FX_ASOF = "2026-10-30";
+
+let memoryStore = null;
+let fxStore = null;
+let storageOK = true;
+
+function loadNotes() {
+  if (memoryStore) return memoryStore;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    memoryStore = raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    storageOK = false;
+    memoryStore = [];
+  }
+  return memoryStore;
+}
+
+function saveNotes(notes) {
+  memoryStore = notes;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+  } catch (e) {
+    storageOK = false;
+  }
+}
+
+function loadFx() {
+  if (fxStore) return fxStore;
+  try {
+    const raw = localStorage.getItem(FX_KEY);
+    fxStore = raw ? Object.assign({}, DEFAULT_FX, JSON.parse(raw)) : Object.assign({}, DEFAULT_FX);
+  } catch (e) {
+    fxStore = Object.assign({}, DEFAULT_FX);
+  }
+  return fxStore;
+}
+
+function saveFx(rates) {
+  fxStore = rates;
+  try { localStorage.setItem(FX_KEY, JSON.stringify(rates)); } catch (e) { storageOK = false; }
+}
+
+// Returns null when no usable rate exists, so callers can flag the gap
+// instead of silently treating the amount as zero.
+function fxRate(ccy) {
+  const r = loadFx()[ccy];
+  return typeof r === "number" && r > 0 ? r : null;
+}
+
+// Display currency for every converted figure. "NATIVE" means show each note
+// in its own currency and refuse to cross-sum.
+const DISP_KEY = "fcn_tracker_dispccy_v1";
+let displayCcy = null;
+
+function getDisplayCcy() {
+  if (displayCcy) return displayCcy;
+  try { displayCcy = localStorage.getItem(DISP_KEY) || "SGD"; }
+  catch (e) { displayCcy = "SGD"; }
+  return displayCcy;
+}
+
+function setDisplayCcy(ccy) {
+  displayCcy = ccy;
+  try { localStorage.setItem(DISP_KEY, ccy); } catch (e) { /* non-fatal */ }
+  renderPortfolio();
+}
+
+// Cross-rate via SGD. Null when either leg has no rate.
+function convert(value, fromCcy, toCcy) {
+  if (fromCcy === toCcy) return value;
+  const rf = fxRate(fromCcy), rt = fxRate(toCcy);
+  if (rf == null || rt == null) return null;
+  return value * rf / rt;
+}
+
+
+
+function esc(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function pill(label, cls) {
+  return '<span class="status-pill ' + cls + '">' + esc(label) + "</span>";
+}
+
+function renderStats(stats, targetId) {
+  const row = document.getElementById(targetId || "statsRow");
+  row.innerHTML = "";
+  stats.forEach(function (s) {
+    const card = document.createElement("div");
+    card.className = "stat-card";
+    card.innerHTML = '<div class="value">' + esc(s.value) + '</div><div class="label">' + esc(s.label) + "</div>";
+    row.appendChild(card);
+  });
+}
+
+function fillTable(tableId, headers, rows) {
+  const table = document.getElementById(tableId);
+  table.querySelector("thead").innerHTML =
+    "<tr>" + headers.map(function (h) { return "<th>" + esc(h) + "</th>"; }).join("") + "</tr>";
+  const tbody = table.querySelector("tbody");
+  tbody.innerHTML = "";
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td class="empty" colspan="' + headers.length + '">Nothing here yet.</td></tr>';
+    return;
+  }
+  rows.forEach(function (cells) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = cells.map(function (c) { return "<td>" + c + "</td>"; }).join("");
+    tbody.appendChild(tr);
+  });
+}
+
+const FREQ_LABEL = { 1: "Annual", 2: "Semi-annual", 4: "Quarterly", 12: "Monthly" };
+
+function noteLabel(note) {
+  const tickers = (note.basket || []).map(function (b) { return b.ticker; }).filter(Boolean).join(", ");
+  return note.name || note.issuer || note.ticker || tickers || (note.instrument === "BOND" ? "Untitled bond" : note.instrument === "FUND" ? "Untitled fund" : "Untitled note");
+}
+
+function renderPortfolio() {
+  const computed = loadNotes().map(function (n) {
+    return { note: n, calc: computeNote(n) };
+  });
+  renderCcyFilter(computed);
+  renderSummary(computed);
+  renderNotesTable(computed);
+  renderFxPanel(computed);
+  renderIncomeSummary(computed);
+}
+
+function bookCurrencies(computed) {
+  return Array.from(new Set(computed.map(function (c) { return c.note.currency || "USD"; }))).sort();
+}
+
+// Options are Native plus SGD plus every currency actually held.
+function toggleOptions(computed) {
+  const opts = ["NATIVE", "SGD"];
+  bookCurrencies(computed).forEach(function (c) {
+    if (opts.indexOf(c) < 0) opts.push(c);
+  });
+  return opts;
+}
+
+function renderCcyFilter(computed) {
+  const opts = toggleOptions(computed);
+  const active = getDisplayCcy();
+  // Keep the applied currency selectable even if no holding uses it any more,
+  // so the dropdown always shows what the figures are actually using.
+  if (opts.indexOf(active) < 0) opts.push(active);
+  fillSelect("ccyFilter", opts.map(function (o) {
+    return { value: o, label: o === "NATIVE" ? "Native currencies" : o };
+  }), active, setDisplayCcy);
+}
+
+
+function renderFxPanel(computed) {
+  const rates = loadFx();
+  const ccys = bookCurrencies(computed);
+  const wrap = document.getElementById("fxRows");
+  wrap.innerHTML = "";
+  ccys.forEach(function (ccy) {
+    const r = rates[ccy];
+    const div = document.createElement("div");
+    div.className = "field";
+    div.innerHTML = '<label>' + esc(ccy) + ' to SGD</label>' +
+      '<input type="number" step="0.0001" min="0" class="fx-input" data-ccy="' + esc(ccy) + '">';
+    div.querySelector("input").value = typeof r === "number" ? r : "";
+    wrap.appendChild(div);
+  });
+  wrap.querySelectorAll(".fx-input").forEach(function (inp) {
+    inp.addEventListener("change", function () {
+      const next = Object.assign({}, loadFx());
+      const v = parseFloat(inp.value);
+      next[inp.dataset.ccy] = isNaN(v) ? 0 : v;
+      saveFx(next);
+      renderPortfolio();
+    });
+  });
+  document.getElementById("fxNote").textContent =
+    "Rates are SGD per 1 unit, seeded from mid-market levels on " + fmtIso(FX_ASOF) +
+    ". They are stored assumptions, not a live feed — edit any rate and the SGD totals recalculate.";
+}
+
+function renderSummary(computed) {
+  const today = new Date();
+  const currencies = bookCurrencies(computed);
+  const disp = getDisplayCcy();
+  const native = disp === "NATIVE";
+  const active = computed.filter(function (c) { return isActive(c.calc, today); });
+  const bondCount = computed.filter(function (c) { return c.note.instrument === "BOND"; }).length;
+  const fundCount = computed.filter(function (c) { return c.note.instrument === "FUND"; }).length;
+  const month = monthLabel(today);
+
+  // Money totals go in ONE currency: the display currency, or the book's only
+  // currency in native view. A mixed native book gets "pick a currency".
+  const tag = native ? (currencies.length === 1 ? currencies[0] : null) : disp;
+  const missingFx = [];
+  const total = function (list, f) {
+    return list.reduce(function (s, c) {
+      const ccy = c.note.currency || "USD";
+      const v = native ? f(c) : convert(f(c), ccy, disp);
+      if (v == null) { if (missingFx.indexOf(ccy) < 0) missingFx.push(ccy); return s; }
+      return s + v;
+    }, 0);
+  };
+  const fig = function (list, key) {
+    return total(list, function (c) { return incomeFigures(c, today)[key]; });
+  };
+
+  const stats = [
+    { label: "Holdings in Book", value: String(computed.length) },
+    { label: "Active", value: String(active.length) },
+    { label: "Inactive (matured / KO)", value: String(computed.length - active.length) },
+    { label: "Bonds", value: String(bondCount) },
+    { label: "Income Funds", value: String(fundCount) },
+  ];
+  if (!tag) {
+    stats.push({ label: "Money Totals", value: "pick a currency" });
+  } else {
+    const m = function (v) { return tag + " " + formatMoney(v); };
+    stats.push({ label: "Invested Amount — Active", value: m(fig(active, "notional")) });
+    stats.push({ label: "Monthly Income — Active", value: m(fig(active, "monthly")) });
+    stats.push({ label: "Annual Income — Active", value: m(fig(active, "annual")) });
+    stats.push({ label: "Coupons in " + month, value: m(fig(computed, "thisMonth")) });
+    stats.push({ label: "Accumulated Income to Date", value: m(fig(computed, "received")) });
+    stats.push({ label: "Income Outstanding", value: m(fig(computed, "outstanding")) });
+  }
+
+  // Average coupon covers FCNs and bonds (a fund has no coupon rate). Current
+  // yield needs a purchase price, which only FCNs carry, so it stays FCN-only.
+  const activeFcn = active.filter(function (c) { return !c.note.instrument || c.note.instrument === "FCN"; });
+  const activeCoupon = active.filter(function (c) { return c.note.instrument !== "FUND"; });
+  const ratio = function (list, numF, denF) {
+    if (!tag) return "mixed ccy";
+    const d = total(list, denF);
+    return d > 0 ? (total(list, numF) / d * 100).toFixed(3) : "0.000";
+  };
+  stats.push({ label: "Avg Coupon % — Active", value: ratio(activeCoupon,
+    function (c) { return c.calc.annualCoupon; }, function (c) { return c.note.notional || 0; }) });
+  stats.push({ label: "Avg Current Yield % — Active FCN", value: ratio(activeFcn,
+    function (c) { return c.calc.annualCoupon; }, function (c) { return c.calc.purchaseAmount; }) });
+
+  // Cost-weighted YTM across active bonds; weights in SGD so a JPY bond is not
+  // weighted as if its face value were USD. Bonds with no rate are left out.
+  let bondW = 0, bondWY = 0;
+  active.forEach(function (c) {
+    if (c.note.instrument !== "BOND" || c.calc.ytmPct == null) return;
+    const w = convert(c.calc.purchaseAmount, c.note.currency || "USD", "SGD");
+    if (w != null && w > 0) { bondW += w; bondWY += w * c.calc.ytmPct; }
+  });
+  if (bondW > 0) stats.push({ label: "Bond Avg YTM % — Active", value: (bondWY / bondW).toFixed(3) });
+  renderStats(stats, "summaryStats");
+
+  const msgs = [];
+  if (!storageOK) {
+    msgs.push("Browser storage is unavailable here, so the book is held in memory for this session only — use Export to keep a copy.");
+  }
+  if (!tag) {
+    msgs.push("Showing native currencies, so cross-currency totals are not summed. Pick a display currency in the Income Summary to roll the book up into one number.");
+  }
+  const noInv = active.filter(function (c) { return c.note.instrument === "FUND" && !c.calc.hasInvested; }).length;
+  if (noInv) {
+    msgs.push(noInv + " income fund(s) have no invested amount entered, so they add nothing to Invested Amount. Their dividends are still counted in income.");
+  }
+  if (missingFx.length) {
+    msgs.push("No FX rate set for " + missingFx.join(", ") + " — those holdings are EXCLUDED from every " + disp + " total until you enter a rate below.");
+  }
+  if (computed.some(function (c) { return c.calc.incomeForgone > 0; })) {
+    msgs.push(tag
+      ? "Knock-outs have cut " + tag + " " + formatMoney(total(computed, function (c) { return c.calc.incomeForgone; })) + " of scheduled coupon from the book."
+      : "Knock-outs have cut scheduled coupon from the book — pick a display currency to see the total.");
+  }
+  document.getElementById("storageNote").textContent = msgs.join(" ");
+}
+
+function renderNotesTable(computed) {
+  const disp = getDisplayCcy();
+  const native = disp === "NATIVE";
+  const convCol = native ? "Annual Income" : "Annual Income (" + disp + ")";
+  const headers = ["Holding", "Bank", "Type", "Ccy", "Invested Amount", "Coupon %", "Freq", "Issue / Buy", "Ends",
+    "Next Coupon", "Annual Income", "Realised Income", "Received", convCol,
+    "Yield %", "YTM %", "KO / KI %", "Status", ""];
+  const rows = computed.map(function (c) {
+    const note = c.note, calc = c.calc;
+    const isBond = note.instrument === "BOND";
+    const isFund = note.instrument === "FUND";
+    const ccy = note.currency || "USD";
+    const tickers = (isBond || isFund) ? (note.ticker || "") : (note.basket || []).map(function (b) { return b.ticker; }).filter(Boolean).join(", ");
+    const annualConv = native ? calc.annualCoupon : convert(calc.annualCoupon, ccy, disp);
+    const status = calc.knockedOut ? pill("Knocked Out", "status-ko")
+      : (calc.matured && isFund) ? pill("Sold", "status-none")
+      : (calc.matured && calc.terminated) ? pill("Terminated", "status-none")
+      : calc.matured ? pill("Matured", "status-none")
+      : calc.koUnrecorded ? pill("KO Barrier Hit", "status-ki")
+      : calc.kiTriggered ? pill("KI Hit", "status-ki")
+      : pill("Live", "status-live");
+    const endLabel = isFund
+      ? (calc.sellDate ? fmtDate(calc.sellDate) + "<br><span class='muted'>" + (calc.matured ? "sold" : "sell date") + "</span>" : "Open-ended")
+      : calc.knockedOut
+      ? fmtDate(calc.koDate) + "<br><span class='muted'>KO (was " + fmtDate(calc.maturityDate) + ")</span>"
+      : (calc.terminated ? fmtDate(calc.termDate) + "<br><span class='muted'>terminates</span>" : fmtDate(calc.maturityDate));
+    const realised = formatMoney(calc.totalCoupon) +
+      (isFund ? "<br><span class='muted'>incl. 12m projection</span>" : "") +
+      (calc.incomeForgone > 0 ? "<br><span class='muted'>forgone " + formatMoney(calc.incomeForgone) + "</span>" : "");
+    return [
+      "<strong>" + esc(noteLabel(note)) + "</strong><br><span class='muted'>" + esc(tickers) + "</span>",
+      note.bank && note.bank.trim() ? esc(note.bank.trim()) : "<span class='muted'>Unassigned</span>",
+      esc(note.noteType || "FCN"),
+      esc(ccy),
+      (isFund && !calc.hasInvested) ? "—" : formatMoney(note.notional || 0),
+      isFund ? "—" : (note.couponRate || 0).toFixed(2),
+      esc(FREQ_LABEL[note.frequency] || note.frequency),
+      esc(fmtIso(note.issueDate || "")),
+      endLabel,
+      calc.nextCoupon ? fmtDate(calc.nextCoupon.end) : "—",
+      formatMoney(calc.annualCoupon),
+      realised,
+      formatMoney(calc.incomeReceived) + (isFund
+        ? " <span class='muted'>(" + calc.couponsPaid + " paid, est.)</span>"
+        : " <span class='muted'>(" + calc.couponsPaid + "/" + calc.periods + ")</span>"),
+      annualConv == null ? "<span class='flag'>no FX</span>" : formatMoney(annualConv),
+      isBond ? "—" : (isFund && !calc.hasInvested) ? "—" : calc.currentYield.toFixed(2),
+      calc.ytmPct == null ? "—" : calc.ytmPct.toFixed(2),
+      (isBond || isFund) ? "—" : (note.koLevelPct || 0).toFixed(0) + "% / " + (note.kiLevelPct || 0).toFixed(0) + "%",
+      status,
+      "<button class='mini-btn' data-edit='" + esc(note.id) + "'>Edit</button> " +
+      "<button class='mini-btn danger' data-del='" + esc(note.id) + "'>Delete</button>",
+    ];
+  });
+  fillTable("notesTable", headers, rows);
+}
+
+
+</script>
+<script>
+// ---- income.b21.js ----
+// Income Summary: income by bank with Status and Bank filters, plus a split by
+// instrument (FCN vs bond). Shares helpers from portfolio.js (convert, esc,
+// fillTable, renderStats, getDisplayCcy, formatMoney, renderPortfolio).
+
+const STATUS_KEY = "fcn_tracker_status_v1";
+const BANK_KEY = "fcn_tracker_bank_v1";
+const ALL_BANKS = "__ALL__";
+const NO_BANK = "__NONE__";
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const SUM_KEYS = ["notional", "monthly", "thisMonth", "annual", "received", "outstanding", "lifetime"];
+let statusFilter = null;
+let bankFilter = null;
+
+function prefGet(key, fallback) {
+  try { return localStorage.getItem(key) || fallback; } catch (e) { return fallback; }
+}
+function prefSet(key, v) {
+  try { localStorage.setItem(key, v); } catch (e) { /* non-fatal */ }
+}
+function getStatusFilter() { return statusFilter || (statusFilter = prefGet(STATUS_KEY, "ACTIVE")); }
+function setStatusFilter(v) { statusFilter = v; prefSet(STATUS_KEY, v); renderPortfolio(); }
+function getBankFilter() { return bankFilter || (bankFilter = prefGet(BANK_KEY, ALL_BANKS)); }
+function setBankFilter(v) { bankFilter = v; prefSet(BANK_KEY, v); renderPortfolio(); }
+
+// Banks group case-insensitively, so "DBS" and "dbs " count as one bank.
+function bankKey(note) {
+  const b = (note.bank || "").trim();
+  return b ? "B:" + b.toUpperCase() : NO_BANK;
+}
+function bankLabel(note) { return (note.bank || "").trim() || "Unassigned"; }
+
+// One display name per bank across the whole book (its most-used spelling,
+// first-seen on a tie), so a filtered view never shows "dbs" next to "DBS".
+function bankNameMap(computed) {
+  const counts = {}, order = [];
+  computed.forEach(function (c) {
+    const k = bankKey(c.note), name = bankLabel(c.note);
+    if (!counts[k]) counts[k] = {};
+    if (counts[k][name] == null) { counts[k][name] = 0; order.push([k, name]); }
+    counts[k][name]++;
+  });
+  const out = {};
+  order.forEach(function (kn) {
+    const k = kn[0], name = kn[1];
+    if (out[k] == null || counts[k][name] > counts[k][out[k]]) out[k] = name;
+  });
+  return out;
+}
+
+// Active = still producing income today: not matured and not already knocked out.
+function isActive(calc, today) {
+  if (calc.matured) return false;
+  if (calc.knockedOut && calc.koDate && calc.koDate <= today) return false;
+  return true;
+}
+
+function monthLabel(d) { return MONTHS[d.getMonth()] + " " + d.getFullYear(); }
+
+// Per-holding figures in the holding's own currency. Run-rates count only
+// while a holding is active; accumulated income is coupons already paid.
+function incomeFigures(c, today) {
+  const start = new Date(today.getFullYear(), today.getMonth(), 1);
+  const end = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+  const active = isActive(c.calc, today);
+  return {
+    notional: c.note.notional || 0,
+    monthly: active ? c.calc.annualCoupon / 12 : 0,
+    thisMonth: c.calc.rows.reduce(function (s, r) {
+      return r.end >= start && r.end < end ? s + r.payment : s;
+    }, 0),
+    annual: active ? c.calc.annualCoupon : 0,
+    received: c.calc.incomeReceived,
+    outstanding: c.calc.incomeRemaining,
+    lifetime: c.calc.totalCoupon,
+  };
+}
+
+function filterHoldings(computed, today) {
+  const st = getStatusFilter(), bk = getBankFilter();
+  return computed.filter(function (c) {
+    const a = isActive(c.calc, today);
+    if (st === "ACTIVE" && !a) return false;
+    if (st === "INACTIVE" && a) return false;
+    return bk === ALL_BANKS || bankKey(c.note) === bk;
+  });
+}
+
+// Groups holdings by groupFn. In native mode each group is further split by
+// currency and nothing is converted; otherwise every figure is converted to
+// the display currency and holdings with no FX rate are left out and counted.
+function aggregateIncome(items, groupFn, disp, today) {
+  const native = disp === "NATIVE";
+  const groups = {};
+  const missing = [];
+  items.forEach(function (c) {
+    const ccy = c.note.currency || "USD";
+    const g0 = groupFn(c);
+    const key = native ? g0.key + "|" + ccy : g0.key;
+    let g = groups[key];
+    if (!g) {
+      g = groups[key] = { label: g0.label, sort: g0.sort, ccys: [], fcn: 0, bond: 0, fund: 0, excluded: 0, sums: {} };
+      SUM_KEYS.forEach(function (k) { g.sums[k] = 0; });
+    }
+    if (g.ccys.indexOf(ccy) < 0) g.ccys.push(ccy);
+    if (c.note.instrument === "BOND") g.bond++; else if (c.note.instrument === "FUND") g.fund++; else g.fcn++;
+    const rate = native ? 1 : convert(1, ccy, disp);
+    if (rate == null) {
+      g.excluded++;
+      if (missing.indexOf(ccy) < 0) missing.push(ccy);
+      return;
+    }
+    const f = incomeFigures(c, today);
+    SUM_KEYS.forEach(function (k) { g.sums[k] += f[k] * rate; });
+  });
+  const list = Object.keys(groups).map(function (k) { return groups[k]; });
+  list.forEach(function (g) { g.ccys.sort(); });
+  list.sort(function (a, b) {
+    return a.sort < b.sort ? -1 : a.sort > b.sort ? 1 : (a.ccys[0] < b.ccys[0] ? -1 : a.ccys[0] > b.ccys[0] ? 1 : 0);
+  });
+  return { groups: list, missing: missing };
+}
+
+// Totals: one row in the display currency, or one row per currency in native
+// mode (amounts in different currencies are never added together).
+function incomeTotals(agg, native) {
+  const out = {};
+  agg.groups.forEach(function (g) {
+    const k = native ? g.ccys[0] : "*";
+    if (!out[k]) { out[k] = {}; SUM_KEYS.forEach(function (s) { out[k][s] = 0; }); }
+    SUM_KEYS.forEach(function (s) { out[k][s] += g.sums[s]; });
+  });
+  return Object.keys(out).sort().map(function (k) { return { ccy: k, sums: out[k] }; });
+}
+
+function holdingsCell(g) {
+  const parts = [];
+  if (g.fcn) parts.push(g.fcn + " FCN");
+  if (g.bond) parts.push(g.bond + (g.bond === 1 ? " Bond" : " Bonds"));
+  if (g.fund) parts.push(g.fund + (g.fund === 1 ? " Fund" : " Funds"));
+  let s = parts.join(" · ");
+  if (g.excluded) s += " <span class='flag'>(" + g.excluded + " excluded: no FX)</span>";
+  return s;
+}
+
+function renderIncomeTable(tableId, firstHeader, agg, disp, keys, labels) {
+  const native = disp === "NATIVE";
+  const unit = native ? "" : " (" + disp + ")";
+  const headers = [firstHeader, native ? "Ccy" : "Currencies", "Holdings"]
+    .concat(keys.map(function (k) { return labels[k] + unit; }));
+  const rows = agg.groups.map(function (g) {
+    return [esc(g.label), esc(g.ccys.join(", ")), holdingsCell(g)]
+      .concat(keys.map(function (k) { return formatMoney(g.sums[k]); }));
+  });
+  incomeTotals(agg, native).forEach(function (t) {
+    const label = native ? "TOTAL (" + t.ccy + ")" : "TOTAL (" + disp + ")";
+    rows.push(["<strong>" + esc(label) + "</strong>", "", ""].concat(
+      keys.map(function (k) { return "<strong>" + formatMoney(t.sums[k]) + "</strong>"; })));
+  });
+  fillTable(tableId, headers, rows);
+}
+
+function attrEsc(s) { return esc(s).replace(/"/g, "&quot;"); }
+
+// Fill a <select> with options and select the active one. onchange is assigned
+// (not added), so re-rendering never stacks up duplicate handlers.
+function fillSelect(id, opts, active, onPick) {
+  const sel = document.getElementById(id);
+  sel.innerHTML = opts.map(function (o) {
+    return '<option value="' + attrEsc(o.value) + '"' + (o.value === active ? " selected" : "") + ">" + esc(o.label) + "</option>";
+  }).join("");
+  sel.value = active;
+  sel.onchange = function () { onPick(sel.value); };
+}
+
+function renderIncomeFilters(computed, banks) {
+  // Saved bank filter that no longer exists in the book falls back to All.
+  if (getBankFilter() !== ALL_BANKS && !banks[getBankFilter()]) { bankFilter = ALL_BANKS; prefSet(BANK_KEY, ALL_BANKS); }
+
+  fillSelect("statusFilter", [
+    { value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }, { value: "ALL", label: "All" },
+  ], getStatusFilter(), setStatusFilter);
+
+  const bankOpts = [{ value: ALL_BANKS, label: "All banks" }].concat(
+    Object.keys(banks).filter(function (k) { return k !== NO_BANK; })
+      .sort(function (a, b) { return banks[a].localeCompare(banks[b]); })
+      .map(function (k) { return { value: k, label: banks[k] }; }));
+  if (banks[NO_BANK]) bankOpts.push({ value: NO_BANK, label: "Unassigned" });
+  fillSelect("bankFilter", bankOpts, getBankFilter(), setBankFilter);
+}
+
+function renderIncomeSummary(computed) {
+  const today = new Date();
+  const disp = getDisplayCcy();
+  const native = disp === "NATIVE";
+  const month = monthLabel(today);
+  const banks = bankNameMap(computed);
+  renderIncomeFilters(computed, banks);
+  const items = filterHoldings(computed, today);
+
+  const labels = {
+    notional: "Invested Amount", monthly: "Monthly Run-Rate", thisMonth: "Coupons in " + month,
+    annual: "Annual Run-Rate", received: "Accumulated to Date", outstanding: "Outstanding", lifetime: "Lifetime Income",
+  };
+
+  const byBank = aggregateIncome(items, function (c) {
+    const k = bankKey(c.note);
+    return { key: k, label: banks[k], sort: (k === NO_BANK ? "~" : "") + banks[k].toUpperCase() };
+  }, disp, today);
+  renderIncomeTable("incomeTable", "Bank", byBank, disp, SUM_KEYS, labels);
+
+  const byInstrument = aggregateIncome(items, function (c) {
+    const kind = c.note.instrument === "BOND" ? "BOND" : c.note.instrument === "FUND" ? "FUND" : "FCN";
+    const names = { FCN: "Fixed Coupon Notes", BOND: "Bonds", FUND: "Income Funds" };
+    return { key: kind, label: names[kind], sort: kind === "FCN" ? "1" : kind === "BOND" ? "2" : "3" };
+  }, disp, today);
+  renderIncomeTable("instrumentTable", "Instrument", byInstrument, disp,
+    ["monthly", "thisMonth", "received", "outstanding", "lifetime"], labels);
+
+  // Headline cards for the filtered set. In native mode they only make sense
+  // when the filtered holdings share one currency.
+  const totals = incomeTotals(byBank, native);
+  const one = totals.length === 1 ? totals[0] : null;
+  const ccyTag = native ? (one ? one.ccy : null) : disp;
+  const money = function (k) {
+    if (!items.length) return "0.00";
+    return ccyTag && one ? ccyTag + " " + formatMoney(one.sums[k]) : "mixed ccy";
+  };
+  renderStats([
+    { label: "Holdings Shown", value: String(items.length) },
+    { label: "Monthly Income — Active (run-rate)", value: money("monthly") },
+    { label: "Coupons in " + month, value: money("thisMonth") },
+    { label: "Accumulated Income to Date", value: money("received") },
+    { label: "Income Outstanding", value: money("outstanding") },
+  ], "incomeStats");
+
+  const notes = [
+    "Active = not matured and not knocked out as of today. Run-rates (monthly = annual / 12) count active holdings only, so they read zero under Inactive.",
+    "Coupons in " + month + " are actual payments dated this calendar month.",
+    "Accumulated to Date is coupons whose payment date has passed (cash basis — a bond's first coupon includes the accrued interest you paid at purchase).",
+  ];
+  const funds = items.filter(function (c) { return c.note.instrument === "FUND"; });
+  if (funds.length) {
+    notes.push("Income funds have no maturity, so their Outstanding and Lifetime income cover the next 12 months only, and their past dividends are estimated at the dividend per unit you entered.");
+    const noInv = funds.filter(function (c) { return !c.calc.hasInvested; }).length;
+    if (noInv) notes.push(noInv + " fund(s) have no invested amount entered and add 0 to Invested Amount.");
+  }
+  if (native && totals.length > 1) notes.push("Native view keeps each currency separate with its own total; pick a currency to roll everything into one number.");
+  const missing = byBank.missing;
+  if (missing.length) notes.push("No FX rate for " + missing.join(", ") + " — those holdings are excluded from the " + disp + " figures until you set a rate.");
+  document.getElementById("incomeNote").textContent = notes.join(" ");
+}
+
+</script>
+<script>
+// ---- parser.b22.js ----
+// Free-text note description parser for the Quick Entry box.
+
+function normalizeTicker(raw) {
+  const t = raw.trim().replace(/\s+/g, " ");
+  return t.indexOf(" ") >= 0 ? t.split(" ").join(".") : t;
+}
+
+// Known banks -> canonical display name.
+const KNOWN_BANKS = [
+  [/Bank\s+of\s+Singapore/, "Bank of Singapore"], [/Standard\s+Chartered|StanChart/, "Standard Chartered"],
+  [/DBS/, "DBS"], [/OCBC/, "OCBC"], [/UOB/, "UOB"], [/HSBC/, "HSBC"], [/Citi(?:bank|group)?/, "Citi"],
+  [/UBS/, "UBS"], [/Julius\s+Baer/, "Julius Baer"], [/J\.?\s?P\.?\s?Morgan|JPM/, "J.P. Morgan"],
+  [/Morgan\s+Stanley/, "Morgan Stanley"], [/Goldman(?:\s+Sachs)?/, "Goldman Sachs"],
+  [/BNP(?:\s+Paribas)?/, "BNP Paribas"], [/Barclays/, "Barclays"], [/Maybank/, "Maybank"], [/CIMB/, "CIMB"],
+  [/Credit\s+Suisse/, "Credit Suisse"], [/Deutsche(?:\s+Bank)?/, "Deutsche Bank"], [/Nomura/, "Nomura"],
+  [/LGT/, "LGT"], [/Pictet/, "Pictet"], [/EFG/, "EFG"],
+];
+
+// A bank is only recognised after a connector ("via DBS", "booked with UBS")
+// or an explicit "bank: X" label — so an FCN on DBS shares ("on DBS SP") is
+// not mistaken for the booking bank. Returns the bank and the span to strip.
+function detectBank(text) {
+  const explicit = /\bbank\s*[:=]\s*([A-Za-z][^,;\n]*?)\s*(?=$|[,;]|\s[-–—]\s)/i.exec(text);
+  if (explicit) {
+    return { bank: explicit[1].trim(), start: explicit.index, end: explicit.index + explicit[0].length };
+  }
+  const conn = /\b(?:booked\s+(?:with|at|via)|via|with|at|from|through|thru)\s+/ig;
+  let m;
+  while ((m = conn.exec(text)) !== null) {
+    const rest = text.slice(m.index + m[0].length);
+    for (let i = 0; i < KNOWN_BANKS.length; i++) {
+      const hit = new RegExp("^(?:" + KNOWN_BANKS[i][0].source + ")\\b", "i").exec(rest);
+      if (hit) return { bank: KNOWN_BANKS[i][1], start: m.index, end: m.index + m[0].length + hit[0].length };
+    }
+  }
+  return null;
+}
+
+// Dates in Quick Entry text: dd/mm/yyyy (also - or . separators) or yyyy-mm-dd. A phrase
+// such as "maturing" is followed by the date; the result is "yyyy-mm-dd" or null.
+const DATE_TOKEN = "(\\d{4}-\\d{1,2}-\\d{1,2}|\\d{1,2}[/.-]\\d{1,2}[/.-]\\d{4})";
+function findDate(text, phraseSrc) {
+  const m = new RegExp(phraseSrc + DATE_TOKEN, "i").exec(text);
+  return m ? parseDmy(m[1]) : null;
+}
+
+function parseNoteDescription(text) {
+  const result = { notes: [] };
+  const bankHit = detectBank(text);
+  if (bankHit) {
+    result.bank = bankHit.bank;
+    // Remove the bank phrase so it cannot leak into the ticker list.
+    text = text.slice(0, bankHit.start) + " " + text.slice(bankHit.end);
+  }
+  const isFund = /\bfunds?\b|\bunits?\b|\bETFs?\b/i.test(text);
+  const isBond = !isFund && /\bbonds?\b|\bT-?(?:bills?|notes?|bonds?)\b|\btreasur(?:y|ies)\b/i.test(text);
+  const nonFcn = isFund || isBond;
+
+  const tenorMatch = text.match(/(\d+(?:\.\d+)?)\s*(months?|mos?\b|years?|yrs?|y\b)/i);
+  if (tenorMatch) {
+    const n = parseFloat(tenorMatch[1]);
+    result.tenorMonths = /^y/i.test(tenorMatch[2]) ? n * 12 : n;
+  } else if (!nonFcn) {
+    result.notes.push("Tenor not detected — left unchanged.");
+  }
+
+  const matIso = findDate(text, "(?:matur\\w*|due)\\s*(?:on\\s+)?");
+  if (matIso) result.maturityDate = matIso;
+
+  const priceMatch = text.match(/(?:priced?|bought|buy|@)(?:\s+at)?\s*(\d+(?:\.\d+)?)(?!\d|[/.-]\d)/i);
+  if (priceMatch) result.purchasePrice = parseFloat(priceMatch[1]);
+
+  // Bond-only terms: issuer, ISIN, issue date, early termination, nominal.
+  const issuerMatch = text.match(/\bissuer\s*[:=]?\s*(.+?)\s*(?=[,;]|\s+(?:ISIN|nominal|coupon|issued?|matur\w*|early|terminat\w*|via|bank)\b|\s+\d|$)/i);
+  if (issuerMatch && issuerMatch[1]) result.issuer = issuerMatch[1].trim();
+  const isinMatch = text.match(/\b([A-Z]{2}[A-Z0-9]{9}[0-9])\b/);
+  if (isinMatch) result.isin = isinMatch[1];
+  const issueIso = findDate(text, "\\b(?:issued?(?:\\s+date)?|issuance)\\s*(?:on\\s+|date\\s*)?[:=]?\\s*");
+  if (issueIso) result.issueDate = issueIso;
+  const termIso = findDate(text, "terminat\\w*\\s*(?:on\\s+|date\\s*)?[:=]?\\s*");
+  if (termIso) result.terminateDate = termIso;
+  const nominalMatch = text.match(/nominal\s*(?:amount\s*)?(?:of\s*)?[:=]?\s*(?:[A-Z]{3}\s*)?(\d[\d,]*(?:\.\d+)?)\s*(k|mm|mio|million|m)?\b/i);
+  if (nominalMatch) {
+    const base = parseFloat(nominalMatch[1].replace(/,/g, ""));
+    const u = (nominalMatch[2] || "").toLowerCase();
+    result.notional = base * (u === "k" ? 1e3 : u ? 1e6 : 1);
+  }
+
+  // Income-fund terms: units, dividend per unit, invested amount, name, purchase / sell dates.
+  if (isFund) {
+    const unitsMatch = text.match(/([\d,]+(?:\.\d+)?)\s*units?\b/i);
+    if (unitsMatch) result.units = parseFloat(unitsMatch[1].replace(/,/g, ""));
+    const dpuMatch = text.match(/\b(?:dividend|distribution|payout)s?\s*(?:of\s+|is\s+)?(?:per\s+(?:unit|share)\s*)?[:=]?\s*(?:[A-Z]{3}\s*|\$)?(\d*\.\d+|\d+)/i);
+    if (dpuMatch) result.dividendPerUnit = parseFloat(dpuMatch[1]);
+    const invMatch = text.match(/\binvested(?:\s+amount)?\s*(?:of\s+|is\s+)?[:=]?\s*(?:[A-Z]{3}\s*|\$)?(\d[\d,]*(?:\.\d+)?)\s*(k|mm|mio|million|m)?\b/i);
+    if (invMatch) {
+      const u = (invMatch[2] || "").toLowerCase();
+      result.invested = parseFloat(invMatch[1].replace(/,/g, "")) * (u === "k" ? 1e3 : u ? 1e6 : 1);
+    }
+    const nameMatch = text.match(/^\s*(.+?\bfund\b.*?)\s*(?=,|;|\s+(?:of\s+)?[\d,]+(?:\.\d+)?\s*units?\b|\s+ISIN\b|\s+dividend|\s+distribution|\s+invested\b|\s+via\b|\s+bank\b|$)/i);
+    if (nameMatch) result.fundName = nameMatch[1].trim();
+    else result.notes.push("Fund name not detected — enter the fund name.");
+    const buyIso = findDate(text, "\\b(?:purchased|bought|purchase\\s+date)\\s*(?:on\\s+)?[:=]?\\s*");
+    if (buyIso) result.issueDate = buyIso;
+    const sellIso = findDate(text, "\\b(?:sell|sold|redeem\\w*|redemption)\\s*(?:on\\s+|date\\s*)?[:=]?\\s*");
+    if (sellIso) result.terminateDate = sellIso;
+  }
+
+  const ccyMatch = text.match(/\b(USD|SGD|EUR|JPY|HKD|GBP|AUD|CNY|CNH|CHF|CAD|NZD|KRW|TWD|INR)\b/i);
+  if (ccyMatch) result.currency = ccyMatch[1].toUpperCase();
+  else result.notes.push("Currency not detected — left unchanged.");
+
+  const typeMatch = text.match(/\b(FCN|DCN|ELN|PRN|RCN|CLN|ACCUM|RACCUM)\b/i);
+  if (typeMatch) result.noteType = typeMatch[1].toUpperCase();
+
+  const freqMatch = text.match(/\b(monthly|quarterly|semi-?annual(?:ly)?|annual(?:ly)?)\b/i);
+  if (freqMatch) {
+    const w = freqMatch[1].toLowerCase();
+    if (w.indexOf("month") === 0) result.frequency = 12;
+    else if (w.indexOf("quarter") === 0) result.frequency = 4;
+    else if (w.indexOf("semi") === 0) result.frequency = 2;
+    else result.frequency = 1;
+  } else if (!isFund) {
+    result.notes.push("Coupon frequency not detected — left unchanged.");
+  }
+
+  const couponMatch = text.match(/coupon[^0-9%]{0,20}(\d+(?:\.\d+)?)\s*%/i) || text.match(/(\d+(?:\.\d+)?)\s*%/);
+  if (couponMatch) result.couponRate = parseFloat(couponMatch[1]);
+  else if (!isFund) result.notes.push("Coupon rate not detected — left unchanged.");
+
+  // A bare "250k" / "5m" is the amount unless a labelled nominal was given.
+  const notionalMatch = result.notional != null ? null : text.match(/(\d+(?:\.\d+)?)\s*(k|m|mm|mio|million)\b/i);
+  if (notionalMatch) {
+    const mult = /^k$/i.test(notionalMatch[2]) ? 1e3 : 1e6;
+    result.notional = parseFloat(notionalMatch[1]) * mult;
+  }
+
+  const tickerSeg = nonFcn ? null : text.match(/\bon\s+([^-–—]+?)(?:\s*[-–—]\s*|$)/i);
+  if (tickerSeg) {
+    result.tickers = tickerSeg[1].split(/,|\band\b|\//i)
+      .map(function (s) { return normalizeTicker(s); })
+      .filter(Boolean);
+  } else if (!nonFcn) {
+    result.notes.push("Underlying tickers not detected — basket left unchanged.");
+  }
+
+  result.instrument = isFund ? "FUND" : isBond ? "BOND" : (typeMatch || result.tickers ? "FCN" : undefined);
+  return result;
+}
+
+</script>
+<script>
+// ---- datepicker.b25.js ----
+// Calendar dropdown for the date fields.
+//
+// The date boxes are text boxes that show and accept dd/mm/yyyy. This picker only
+// FILLS the box (as dd/mm/yyyy) when you choose a day, so typing, validation and
+// everything that reads the dates keeps working unchanged. A custom popup is used
+// because the browser's built-in date picker follows the computer's regional
+// settings and cannot be forced to dd/mm/yyyy.
+//
+// Uses formatDate / parseDmy / fmtIso / parseDateInput from calculator.js.
+
+const MONDAY_FIRST = true;
+const DP_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const DP_DOW = MONDAY_FIRST ? ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"] : ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+const DP_FIELDS = ["issueDate", "maturityDate", "terminateDate", "koDate"];
+
+let dpOpenId = null;   // id of the date box the calendar is open for
+let dpYear = 0;        // month being viewed
+let dpMonth = 0;
+
+// A touch screen (iPad): the on-screen keyboard and the calendar would fight over the screen,
+// so there the calendar opens only from its icon and never steals focus into the text box.
+function dpCoarse() {
+  return typeof window !== "undefined" && !!window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+}
+
+function shiftMonth(y, m, delta) {
+  const t = y * 12 + m + delta;
+  return { y: Math.floor(t / 12), m: ((t % 12) + 12) % 12 };
+}
+
+// 6 weeks x 7 days = 42 cells covering the month, with the neighbouring months'
+// days filling the first and last rows.
+function calendarGrid(y, m, mondayFirst) {
+  const first = new Date(y, m, 1);
+  const offset = mondayFirst ? (first.getDay() + 6) % 7 : first.getDay();
+  const cells = [];
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(y, m, 1 - offset + i);
+    cells.push({ iso: formatDate(d), day: d.getDate(), out: d.getMonth() !== m });
+  }
+  return cells;
+}
+
+function dpHtml(selectedIso, todayIso) {
+  const cells = calendarGrid(dpYear, dpMonth, MONDAY_FIRST);
+  const y0 = Math.min(1990, dpYear - 5), y1 = Math.max(2100, dpYear + 5);
+  let months = "", years = "";
+  DP_MONTHS.forEach(function (name, i) {
+    months += '<option value="' + i + '"' + (i === dpMonth ? " selected" : "") + ">" + name + "</option>";
+  });
+  for (let y = y0; y <= y1; y++) years += '<option value="' + y + '"' + (y === dpYear ? " selected" : "") + ">" + y + "</option>";
+
+  return '<div class="dp-head">' +
+    '<button type="button" class="dp-nav" data-action="prev" aria-label="Previous month">&#8249;</button>' +
+    '<select data-action="month" aria-label="Month">' + months + "</select>" +
+    '<select data-action="year" aria-label="Year">' + years + "</select>" +
+    '<button type="button" class="dp-nav" data-action="next" aria-label="Next month">&#8250;</button>' +
+    "</div>" +
+    '<div class="dp-grid">' +
+    DP_DOW.map(function (d) { return '<div class="dp-dow">' + d + "</div>"; }).join("") +
+    cells.map(function (c) {
+      return '<button type="button" class="dp-day' + (c.out ? " out" : "") + (c.iso === todayIso ? " today" : "") +
+        (c.iso === selectedIso ? " sel" : "") + '" data-action="pick" data-iso="' + c.iso + '">' + c.day + "</button>";
+    }).join("") +
+    "</div>" +
+    '<div class="dp-foot"><button type="button" class="dp-link" data-action="today">Today</button>' +
+    '<button type="button" class="dp-link" data-action="clear">Clear</button></div>';
+}
+
+function renderDatePicker() {
+  const input = document.getElementById(dpOpenId);
+  document.getElementById("datePicker").innerHTML = dpHtml(parseDmy(input.value), formatDate(new Date()));
+}
+
+// Sit under the box; flip above it when there is no room below; stay on screen.
+function positionDatePicker(input) {
+  const pop = document.getElementById("datePicker");
+  if (!input.getBoundingClientRect) return;
+  const r = input.getBoundingClientRect();
+  const w = pop.offsetWidth || 288, h = pop.offsetHeight || 330;
+  const vw = (typeof window !== "undefined" && window.innerWidth) || 1280;
+  const vh = (typeof window !== "undefined" && window.innerHeight) || 800;
+  let top = r.bottom + 6;
+  if (top + h > vh - 8 && r.top - h - 6 > 8) top = r.top - h - 6;
+  pop.style.left = Math.max(8, Math.min(r.left, vw - w - 8)) + "px";
+  pop.style.top = Math.max(8, top) + "px";
+}
+
+function openDatePicker(id) {
+  const input = document.getElementById(id);
+  const iso = parseDmy(input.value);
+  const base = iso ? parseDateInput(iso) : new Date();
+  dpOpenId = id;
+  dpYear = base.getFullYear();
+  dpMonth = base.getMonth();
+  renderDatePicker();
+  document.getElementById("datePicker").hidden = false;
+  positionDatePicker(input);
+}
+
+// Keep the calendar attached to its box when the page scrolls or the window turns.
+function repositionDatePicker() {
+  if (!dpOpenId) return;
+  const input = document.getElementById(dpOpenId);
+  const vh = (typeof window !== "undefined" && window.innerHeight) || 800;
+  const r = input.getBoundingClientRect ? input.getBoundingClientRect() : null;
+  if (r && (r.bottom < 0 || r.top > vh)) { closeDatePicker(); return; }
+  positionDatePicker(input);
+}
+
+function closeDatePicker() {
+  dpOpenId = null;
+  document.getElementById("datePicker").hidden = true;
+}
+
+function toggleDatePicker(id) {
+  if (dpOpenId === id) closeDatePicker(); else openDatePicker(id);
+}
+
+function dpChoose(iso) {
+  const id = dpOpenId;
+  const input = document.getElementById(id);
+  input.value = iso ? fmtIso(iso) : "";
+  closeDatePicker();
+  if (!dpCoarse() && input.focus) input.focus();
+}
+
+// Handles a click on anything inside the calendar.
+function dpClick(target) {
+  let t = target;
+  while (t && t.getAttribute && !t.getAttribute("data-action")) t = t.parentNode;
+  if (!t || !t.getAttribute) return;
+  const action = t.getAttribute("data-action");
+  if (action === "prev" || action === "next") {
+    const s = shiftMonth(dpYear, dpMonth, action === "next" ? 1 : -1);
+    dpYear = s.y; dpMonth = s.m;
+    renderDatePicker();
+  } else if (action === "pick") {
+    dpChoose(t.getAttribute("data-iso"));
+  } else if (action === "today") {
+    dpChoose(formatDate(new Date()));
+  } else if (action === "clear") {
+    dpChoose("");
+  }
+}
+
+// Month / year dropdowns inside the calendar.
+function dpChange(target) {
+  const kind = target.getAttribute && target.getAttribute("data-action");
+  if (kind === "month") dpMonth = parseInt(target.value, 10);
+  else if (kind === "year") dpYear = parseInt(target.value, 10);
+  else return;
+  renderDatePicker();
+}
+
+// True when a click landed inside the calendar or on a date box / its icon.
+function dpInside(target) {
+  for (let n = target; n; n = n.parentNode) {
+    if (n.id === "datePicker" || /\bdate-wrap\b/.test(n.className || "")) return true;
+  }
+  return false;
+}
+
+function initDatePicker() {
+  const pop = document.getElementById("datePicker");
+
+  document.querySelectorAll(".cal-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () { toggleDatePicker(btn.getAttribute("data-for")); });
+  });
+
+  DP_FIELDS.forEach(function (id) {
+    const el = document.getElementById(id);
+    el.addEventListener("click", function () { if (!dpCoarse() && dpOpenId !== id) openDatePicker(id); });
+    el.addEventListener("input", closeDatePicker);   // typing: get out of the way
+    el.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowDown") { if (e.preventDefault) e.preventDefault(); openDatePicker(id); }
+      else if (e.key === "Escape" || e.key === "Tab") closeDatePicker();
+    });
+  });
+
+  // Clicks inside the calendar must not reach the document handler below: choosing
+  // a month re-renders the grid, which detaches the clicked button and would make
+  // it look like an outside click.
+  pop.addEventListener("click", function (e) {
+    if (e.stopPropagation) e.stopPropagation();
+    dpClick(e.target);
+  });
+  pop.addEventListener("change", function (e) { dpChange(e.target); });
+
+  // "pointerdown" as well as "click": iOS does not send click events for taps on plain page
+  // areas, so a tap on blank space would otherwise never close the calendar.
+  const outside = function (e) { if (dpOpenId && !dpInside(e.target)) closeDatePicker(); };
+  document.addEventListener("click", outside);
+  document.addEventListener("pointerdown", outside);
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeDatePicker(); });
+  if (typeof window !== "undefined" && window.addEventListener) {
+    window.addEventListener("resize", repositionDatePicker);
+    window.addEventListener("scroll", repositionDatePicker, true);
+  }
+}
+
+</script>
+<script>
+// ---- bond-ui.b22.js ----
+// Bond-specific UI: instrument toggle, defaults, validation, results panel.
+// Relies on helpers from app.js (val, setVal, num, readForm, writeForm) which
+// are only called at runtime, after every script has loaded.
+
+const FCN_HINT = "Describe the holding in plain language and auto-fill the fields below. Example: 12 months USD FCN on NVDA UW, META UW via DBS - monthly coupon of 9%";
+const BOND_HINT = "Describe the bond in plain language. Example: USD bond, issuer: Apple Inc, ISIN US0378331005, nominal 250k, 4.5% semi-annual coupon, issued 02/11/2026, maturing 02/11/2031, early termination 31/03/2029, via UBS";
+
+const FUND_HINT = "Describe the fund in plain language. Example: PIMCO GIS Income Fund E Class USD Income, ISIN IE00B8K7V925, 25,662.682 units, dividend 0.0496 per unit monthly, invested 250k, via DBS";
+
+function currentInstrument() { return val("instrument") || "FCN"; }
+function isBondForm() { return currentInstrument() === "BOND"; }
+function isFundForm() { return currentInstrument() === "FUND"; }
+
+// Labels that mean something different for each instrument.
+const INSTRUMENT_TEXT = {
+  FCN:  { title: "Note Terms", hint: FCN_HINT, name: "Name / reference", ticker: "Ticker / ISIN", notional: "Invested amount",
+          freq: "Coupon frequency", issue: "Issue date", terminate: "Early termination date (optional)" },
+  BOND: { title: "Bond Terms", hint: BOND_HINT, name: "Name / reference", ticker: "ISIN", notional: "Nominal amount",
+          freq: "Coupon frequency", issue: "Issue date", terminate: "Early termination date (optional)" },
+  FUND: { title: "Income Fund Terms", hint: FUND_HINT, name: "Fund name", ticker: "ISIN", notional: "Invested amount",
+          freq: "Dividend frequency", issue: "Purchase date", terminate: "Sell / redeem date (optional)" },
+};
+
+// Show the fields that belong to the chosen instrument and relabel the form.
+function applyInstrumentUI() {
+  const inst = currentInstrument();
+  document.querySelectorAll("[data-inst]").forEach(function (el) {
+    el.style.display = el.getAttribute("data-inst").split(" ").indexOf(inst) >= 0 ? "" : "none";
+  });
+  const t = INSTRUMENT_TEXT[inst] || INSTRUMENT_TEXT.FCN;
+  document.getElementById("termsTitle").textContent = t.title;
+  document.getElementById("quickHint").textContent = t.hint;
+  document.getElementById("nameLabel").textContent = t.name;
+  document.getElementById("tickerLabel").textContent = t.ticker;
+  document.getElementById("notionalLabel").textContent = t.notional;
+  document.getElementById("freqLabel").textContent = t.freq;
+  document.getElementById("issueLabel").textContent = t.issue;
+  document.getElementById("terminateLabel").textContent = t.terminate;
+}
+
+function bondDefaults() {
+  const today = new Date();
+  return {
+    instrument: "BOND", noteType: "BOND", currency: "USD",
+    notional: 100000, couponRate: 4.5, frequency: 2,
+    issueDate: formatDate(today), maturityDate: formatDate(addMonths(today, 60)),
+    terminateDate: "", issuer: "", basket: [],
+  };
+}
+
+// Switch between instruments, carrying over only the fields that mean the
+// same thing in all of them: bank, currency and the ISIN / ticker (plus the
+// name, which FCNs and funds both use).
+function switchInstrument(kind) {
+  const next = kind === "BOND" ? bondDefaults() : kind === "FUND" ? fundDefaults() : {};
+  next.instrument = kind;
+  next.name = val("noteName");
+  next.bank = val("bank");
+  next.ticker = val("ticker");
+  if (val("currency").trim()) next.currency = val("currency").trim().toUpperCase();
+  writeForm(next);
+}
+
+// Returns a message when a bond cannot be calculated or saved, else null.
+function bondProblem(note) {
+  if (note.instrument !== "BOND") return null;
+  if (!note.issueDate) return "Enter the issue date.";
+  if (!note.maturityDate) return "Enter a maturity date for this bond.";
+  if (!(note.notional > 0)) return "Enter the nominal amount.";
+  if (note.issueDate >= note.maturityDate) return "Maturity must be after the issue date.";
+  if (note.terminateDate && note.terminateDate <= note.issueDate) {
+    return "The early termination date must be after the issue date.";
+  }
+  return null;
+}
+
+function renderBondResults() {
+  const note = readForm();
+  const problem = bondProblem(note);
+  const feedback = document.getElementById("saveFeedback");
+  if (problem) {
+    feedback.textContent = problem;
+    document.getElementById("resultsPanel").style.display = "none";
+    return;
+  }
+  feedback.textContent = "";
+
+  const calc = computeNote(note);
+  const rate = fxRate(note.currency);
+  const sgd = function (v) { return rate == null ? "no FX rate" : "SGD " + formatMoney(v * rate); };
+  const maturity = parseDateInput(note.maturityDate);
+  const ignored = note.terminateDate && !calc.terminated;
+
+  let summary = noteLabel(note) + (note.ticker ? " (" + note.ticker + ")" : "") + " — " +
+    note.currency + " " + formatMoney(note.notional) + " nominal, " + note.couponRate + "% " +
+    (FREQ_LABEL[note.frequency] || "").toLowerCase() + " (" + formatMoney(calc.couponAmount) + " per full period), issued " +
+    fmtIso(note.issueDate) + ", " + (calc.terminated
+      ? "terminates early " + fmtDate(calc.termDate) + " (scheduled maturity " + fmtDate(maturity) + ")"
+      : "matures " + fmtDate(calc.maturityDate)) + ".";
+  if (calc.terminated) summary += " Accrued interest to the termination date is paid, pro-rated 30/360.";
+  if (ignored) summary += " The early termination date is on or after maturity, so it is ignored.";
+  document.getElementById("noteSummary").textContent = summary;
+
+  renderStats([
+    { label: "Coupon per Full Period", value: formatMoney(calc.couponAmount) },
+    { label: "Payments", value: String(calc.periods) },
+    { label: "Annual Coupon Income", value: formatMoney(calc.annualCoupon) },
+    { label: "Total Coupon Income", value: formatMoney(calc.totalCoupon) },
+    { label: "Total Coupon Income (SGD)", value: sgd(calc.totalCoupon) },
+    { label: "Received to Date", value: formatMoney(calc.incomeReceived) },
+    { label: "Outstanding", value: formatMoney(calc.incomeRemaining) },
+    { label: "Principal Returned at End", value: formatMoney(calc.redemptionAmount) },
+    { label: "Total Cash Flow", value: formatMoney(calc.totalCashFlow) },
+    { label: "Years to End", value: calc.yearsToMaturity.toFixed(2) },
+  ], "statsRow");
+
+  const today = new Date();
+  const scheduleRows = calc.rows.map(function (r) {
+    const status = r.isStub ? pill("Part-period", "status-ki")
+      : r.end <= today ? pill("Paid", "status-live") : pill("Scheduled", "status-none");
+    return [String(r.n), fmtDate(r.start), fmtDate(r.end), String(r.days),
+      formatMoney(r.payment), formatMoney(r.cumulative), status];
+  });
+  if (calc.rows.length) {
+    scheduleRows.push(["R", "", fmtDate(calc.termDate), "", formatMoney(calc.redemptionAmount),
+      formatMoney(calc.totalCashFlow), pill("Principal", "status-none")]);
+  }
+  fillTable("scheduleTable",
+    ["#", "Accrual Start", "Payment Date", "Days", "Coupon", "Cumulative", "Status"], scheduleRows);
+
+  document.getElementById("fcnResultsBlock").style.display = "none";
+  document.getElementById("resultsPanel").style.display = "block";
+}
+
+</script>
+<script>
+// ---- fund-ui.b22.js ----
+// Income fund UI: defaults, validation and the results panel.
+// Relies on helpers from app.js and bond-ui.js (val, readForm, writeForm) which
+// are only called at runtime, after every script has loaded.
+
+function fundDefaults() {
+  return {
+    instrument: "FUND", noteType: "FUND", currency: "USD", frequency: 12,
+    issueDate: formatDate(new Date()), terminateDate: "",
+    units: null, dividendPerUnit: null, investedAmount: null, basket: [],
+  };
+}
+
+// Returns a message when a fund cannot be calculated or saved, else null.
+function fundProblem(note) {
+  if (note.instrument !== "FUND") return null;
+  if (!(note.units > 0)) return "Enter the number of units held.";
+  if (!(note.dividendPerUnit > 0)) return "Enter the dividend per unit.";
+  if (!note.issueDate) return "Enter the purchase date.";
+  if (note.terminateDate && note.terminateDate <= note.issueDate) return "The sell date must be after the purchase date.";
+  return null;
+}
+
+function fmtUnits(n) { return n.toLocaleString("en-US", { maximumFractionDigits: 3 }); }
+function fmtPerUnit(n) { return String(parseFloat(n.toFixed(6))); }
+
+function renderFundResults() {
+  const note = readForm();
+  const problem = fundProblem(note);
+  const feedback = document.getElementById("saveFeedback");
+  if (problem) {
+    feedback.textContent = problem;
+    document.getElementById("resultsPanel").style.display = "none";
+    return;
+  }
+  feedback.textContent = "";
+
+  const calc = computeNote(note);
+  const rate = fxRate(note.currency);
+  const sgd = function (v) { return rate == null ? "no FX rate" : "SGD " + formatMoney(v * rate); };
+  const monthly = note.frequency === 12;
+  const freqWord = (FREQ_LABEL[note.frequency] || "").toLowerCase();
+
+  document.getElementById("noteSummary").textContent =
+    noteLabel(note) + (note.ticker ? " (" + note.ticker + ")" : "") + " — " + fmtUnits(note.units) + " units × " +
+    note.currency + " " + fmtPerUnit(note.dividendPerUnit) + " = " + note.currency + " " + formatMoney(calc.couponAmount) +
+    " " + (monthly ? "per month" : "per " + freqWord + " payment") + ". Bought " + fmtIso(note.issueDate) +
+    (calc.sellDate ? ", sold " + fmtDate(calc.sellDate) : ", open-ended") + ". " +
+    "Fund distributions are not guaranteed and change month to month: every payment below, past and future, uses the " +
+    "dividend per unit you entered, so \"received to date\" is an estimate. Payments fall on the last day of the month; " +
+    "income is projected 12 months ahead.";
+
+  const stats = [
+    { label: "Units Held", value: fmtUnits(note.units) },
+    { label: "Dividend per Unit", value: fmtPerUnit(note.dividendPerUnit) },
+    { label: monthly ? "Monthly Dividend" : "Dividend per Payment", value: formatMoney(calc.couponAmount) },
+    { label: "Monthly Income (annual ÷ 12)", value: formatMoney(calc.monthlyAverage) },
+    { label: "Annual Income", value: formatMoney(calc.annualCoupon) },
+    { label: "Annual Income (SGD)", value: sgd(calc.annualCoupon) },
+    { label: "Next Payment", value: calc.nextCoupon ? fmtDate(calc.nextCoupon.end) : "—" },
+    { label: "Received to Date (est.)", value: formatMoney(calc.incomeReceived) },
+    { label: "Next 12 Months (projected)", value: formatMoney(calc.incomeRemaining) },
+  ];
+  if (calc.hasInvested) {
+    stats.push({ label: "Invested Amount", value: formatMoney(calc.investedAmount) });
+    stats.push({ label: "Yield on Invested Amount %", value: calc.currentYield.toFixed(3) });
+  }
+  renderStats(stats, "statsRow");
+
+  const today = new Date();
+  fillTable("scheduleTable",
+    ["#", "Payment Date", "Units", "Per Unit", "Dividend", "Cumulative", "Status"],
+    calc.rows.map(function (r) {
+      return [String(r.n), fmtDate(r.end), fmtUnits(r.units), fmtPerUnit(r.perUnit),
+        formatMoney(r.payment), formatMoney(r.cumulative),
+        r.end <= today ? pill("Paid (est.)", "status-live") : pill("Projected", "status-none")];
+    }));
+
+  document.getElementById("fcnResultsBlock").style.display = "none";
+  document.getElementById("resultsPanel").style.display = "block";
+}
+
+</script>
+<script>
+// ---- app.b25.js ----
+// UI wiring: tabs, note editor form, save/edit/delete, editor results panel.
+
+let currentEditId = null;
+
+function val(id) { return document.getElementById(id).value; }
+function setVal(id, v) { document.getElementById(id).value = v; }
+function num(id, fallback) {
+  const n = parseFloat(val(id));
+  return isNaN(n) ? (fallback || 0) : n;
+}
+
+// Date fields are typed as dd/mm/yyyy; the app stores and computes with yyyy-mm-dd.
+function readDate(id) { return parseDmy(val(id)) || ""; }
+function setDate(id, iso) { setVal(id, iso ? fmtIso(iso) : ""); }
+
+const DATE_FIELDS = {
+  FCN:  [["issueDate", "issue date"], ["koDate", "knock-out date"]],
+  BOND: [["issueDate", "issue date"], ["maturityDate", "maturity date"], ["terminateDate", "early termination date"]],
+  FUND: [["issueDate", "purchase date"], ["terminateDate", "sell date"]],
+};
+
+// A message when a visible date field holds text that is not a real dd/mm/yyyy date.
+function formDateProblem() {
+  const list = DATE_FIELDS[val("instrument") || "FCN"] || [];
+  for (let i = 0; i < list.length; i++) {
+    const t = val(list[i][0]).trim();
+    if (t && !parseDmy(t)) return "The " + list[i][1] + " \"" + t + "\" is not a valid date — use dd/mm/yyyy, for example 31/12/2026.";
+  }
+  return null;
+}
+
+function addUnderlyingRow(ticker, initialFixing) {
+  const tr = document.createElement("tr");
+  tr.innerHTML =
+    '<td><input type="text" class="row-input ticker-input" placeholder="e.g. AAPL.UW"></td>' +
+    '<td><input type="number" class="row-input fixing-input" min="0" step="0.01"></td>' +
+    '<td class="calc-cell strike-cell">—</td>' +
+    '<td class="calc-cell ko-cell">—</td>' +
+    '<td class="calc-cell ki-cell">—</td>' +
+    '<td><button type="button" class="mini-btn danger remove-btn">Remove</button></td>';
+  tr.querySelector(".ticker-input").value = ticker || "";
+  tr.querySelector(".fixing-input").value = initialFixing == null ? 100 : initialFixing;
+  tr.querySelector(".fixing-input").addEventListener("input", recomputeBasketPrices);
+  tr.querySelector(".remove-btn").addEventListener("click", function () { tr.remove(); });
+  document.getElementById("underlyingRows").appendChild(tr);
+  recomputeBasketPrices();
+}
+
+// Fill the derived Strike/KO/KI price cells live from the barrier levels.
+function recomputeBasketPrices() {
+  const strikePct = num("strikeLevel");
+  const koPct = num("koLevel");
+  const kiPct = num("kiLevel");
+  document.querySelectorAll("#underlyingRows tr").forEach(function (tr) {
+    const fixing = parseFloat(tr.querySelector(".fixing-input").value) || 0;
+    const show = function (sel, pct) {
+      tr.querySelector(sel).textContent = (fixing > 0 && pct > 0) ? formatMoney(fixing * pct / 100) : "—";
+    };
+    show(".strike-cell", strikePct);
+    show(".ko-cell", koPct);
+    show(".ki-cell", kiPct);
+  });
+}
+
+function readBasket() {
+  const basket = [];
+  document.querySelectorAll("#underlyingRows tr").forEach(function (tr) {
+    const ticker = tr.querySelector(".ticker-input").value.trim();
+    const initialFixing = parseFloat(tr.querySelector(".fixing-input").value) || 0;
+    if (ticker || initialFixing) {
+      basket.push({ ticker: ticker || "Underlying " + (basket.length + 1), initialFixing: initialFixing });
+    }
+  });
+  return basket;
+}
+
+function readForm() {
+  const note = {
+    id: currentEditId || (Date.now().toString(36) + Math.random().toString(36).slice(2, 7)),
+    instrument: val("instrument") || "FCN",
+    name: val("noteName").trim(),
+    ticker: val("ticker").trim(),
+    bank: val("bank").trim(),
+    noteType: val("noteType").trim() || "FCN",
+    currency: val("currency").trim().toUpperCase() || "USD",
+    notional: num("notional"),
+    couponRate: num("couponRate"),
+    frequency: parseInt(val("frequency"), 10) || 12,
+    tenorMonths: num("tenor"),
+    issueDate: readDate("issueDate"),
+    maturityDate: readDate("maturityDate"),
+    terminateDate: readDate("terminateDate"),
+    issuer: val("issuer").trim(),
+    dayCount: val("dayCount"),
+    redemptionPct: num("redemption", 100),
+    issuePricePct: num("issuePrice", 100),
+    purchasePricePct: num("purchasePrice", 100),
+    strikeLevelPct: num("strikeLevel"),
+    koLevelPct: num("koLevel"),
+    kiLevelPct: num("kiLevel"),
+    koDate: readDate("koDate"),
+    units: num("units"),
+    dividendPerUnit: num("dividendPerUnit"),
+    investedAmount: num("investedAmount"),
+    basket: readBasket(),
+  };
+  if (note.instrument === "BOND") {
+    // A bond has no basket, barriers, KO or price. The issuer doubles as its
+    // display name, and fixed values are stored so shared tables read cleanly.
+    note.noteType = "BOND";
+    note.name = note.issuer;
+    note.basket = [];
+    note.koDate = "";
+    note.dayCount = "30/360";
+    note.redemptionPct = 100;
+    note.purchasePricePct = 100;
+    if (note.maturityDate && note.issueDate) {
+      note.tenorMonths = bondMonthsBetween(parseDateInput(note.issueDate), parseDateInput(note.maturityDate));
+    }
+  }
+  if (note.instrument === "FUND") {
+    // A fund has no barriers, KO, coupon or maturity. Its shared amount field is
+    // the invested amount (0 when none is given); the sell date reuses
+    // the early-termination field, and the purchase date is the issue date.
+    note.noteType = "FUND";
+    note.basket = [];
+    note.koDate = "";
+    note.couponRate = 0;
+    note.dayCount = "30/360";
+    note.redemptionPct = 100;
+    note.purchasePricePct = 100;
+    note.notional = note.investedAmount;
+  }
+  return note;
+}
+
+// Suggest banks already used in the book so spellings stay consistent.
+function refreshBankList() {
+  const seen = {};
+  loadNotes().forEach(function (n) {
+    const b = (n.bank || "").trim();
+    if (b && !seen[b.toUpperCase()]) seen[b.toUpperCase()] = b;
+  });
+  const list = document.getElementById("bankList");
+  list.innerHTML = Object.keys(seen).sort().map(function (k) {
+    return '<option value="' + esc(seen[k]).replace(/"/g, "&quot;") + '"></option>';
+  }).join("");
+}
+
+function writeForm(note) {
+  setVal("instrument", note.instrument || "FCN");
+  setVal("bank", note.bank || "");
+  refreshBankList();
+  setDate("maturityDate", note.maturityDate);
+  setDate("terminateDate", note.terminateDate);
+  setVal("issuer", note.issuer || "");
+  setVal("units", note.units ? note.units : "");
+  setVal("dividendPerUnit", note.dividendPerUnit ? note.dividendPerUnit : "");
+  // Older saved funds kept a NAV per unit instead of an invested amount.
+  const invested = note.investedAmount != null ? note.investedAmount : (note.units || 0) * (note.navPerUnit || 0);
+  setVal("investedAmount", invested ? invested : "");
+  setVal("noteName", note.name || "");
+  setVal("ticker", note.ticker || "");
+  setVal("noteType", note.noteType || "FCN");
+  setVal("currency", note.currency || "USD");
+  setVal("notional", note.notional == null ? 1000000 : note.notional);
+  setVal("couponRate", note.couponRate == null ? 9 : note.couponRate);
+  setVal("frequency", String(note.frequency || 12));
+  setVal("tenor", note.tenorMonths == null ? 12 : note.tenorMonths);
+  setDate("issueDate", note.issueDate || formatDate(new Date()));
+  setVal("dayCount", note.dayCount || "30/360");
+  setVal("redemption", note.redemptionPct == null ? 100 : note.redemptionPct);
+  setVal("issuePrice", note.issuePricePct == null ? 100 : note.issuePricePct);
+  setVal("purchasePrice", note.purchasePricePct == null ? 100 : note.purchasePricePct);
+  setVal("strikeLevel", note.strikeLevelPct == null ? 100 : note.strikeLevelPct);
+  setVal("koLevel", note.koLevelPct == null ? 105 : note.koLevelPct);
+  setVal("kiLevel", note.kiLevelPct == null ? 70 : note.kiLevelPct);
+  setDate("koDate", note.koDate);
+  document.getElementById("underlyingRows").innerHTML = "";
+  (note.basket && note.basket.length ? note.basket : [{ ticker: "", initialFixing: 100 }])
+    .forEach(function (b) { addUnderlyingRow(b.ticker, b.initialFixing); });
+  recomputeBasketPrices();
+  applyInstrumentUI();
+  document.getElementById("resultsPanel").style.display = "none";
+  document.getElementById("saveFeedback").textContent = "";
+  document.getElementById("parseFeedback").textContent = "";
+}
+
+function switchTab(name) {
+  document.querySelectorAll(".tab").forEach(function (t) {
+    t.classList.toggle("active", t.dataset.tab === name);
+  });
+  document.getElementById("portfolioView").style.display = name === "portfolio" ? "" : "none";
+  document.getElementById("editorView").style.display = name === "editor" ? "" : "none";
+  if (name === "portfolio") renderPortfolio();
+}
+
+function renderEditorResults() {
+  const dateProblem = formDateProblem();
+  if (dateProblem) {
+    document.getElementById("saveFeedback").textContent = dateProblem;
+    document.getElementById("resultsPanel").style.display = "none";
+    return;
+  }
+  if (isBondForm()) { renderBondResults(); return; }
+  if (isFundForm()) { renderFundResults(); return; }
+  document.getElementById("fcnResultsBlock").style.display = "";
+  const note = readForm();
+  const calc = computeNote(note);
+  const ccy = note.currency;
+  const rate = fxRate(ccy);
+  const sgd = function (v) { return rate == null ? "no FX rate" : "SGD " + formatMoney(v * rate); };
+
+  const ending = calc.knockedOut
+    ? "knocked out " + fmtDate(calc.koDate) + " (scheduled maturity was " + fmtDate(calc.maturityDate) + ")"
+    : "matures " + fmtDate(calc.maturityDate);
+  document.getElementById("noteSummary").textContent =
+    noteLabel(note) + " (" + note.noteType + ") — " + ccy + " " + formatMoney(note.notional) +
+    " invested, " + note.couponRate + "% " + (FREQ_LABEL[note.frequency] || "").toLowerCase() +
+    ", issued " + fmtIso(note.issueDate) + ", " + ending;
+
+  const stats = [
+    { label: "Coupon Payments", value: String(calc.periods) + (calc.knockedOut ? " of " + calc.scheduledPeriods : "") },
+    { label: "Realised Coupon Income", value: formatMoney(calc.totalCoupon) },
+    { label: "Realised Income (SGD)", value: sgd(calc.totalCoupon) },
+    { label: "Income Received", value: formatMoney(calc.incomeReceived) },
+    { label: "Income Outstanding", value: formatMoney(calc.incomeRemaining) },
+    { label: "Purchase Cost", value: formatMoney(calc.purchaseAmount) },
+    { label: "Redemption Amount", value: formatMoney(calc.redemptionAmount) },
+    { label: "Current Yield %", value: calc.currentYield.toFixed(3) },
+    { label: "Simple Yield to Maturity %", value: calc.simpleYTM.toFixed(3) },
+  ];
+  if (calc.knockedOut) {
+    stats.push({ label: "Pro-Rated Stub Coupon", value: formatMoney(calc.stubCoupon) });
+    stats.push({ label: "Coupon Income Forgone", value: formatMoney(calc.incomeForgone) });
+    stats.push({ label: "Realised Annualised Yield %", value: calc.realizedAnnualYield.toFixed(3) });
+  }
+  renderStats(stats, "statsRow");
+
+  fillTable("basketResultsTable",
+    ["Ticker", "Initial Fixing", "Strike Price", "KO Price", "KI Price"],
+    calc.basket.map(function (b) {
+      return [esc(b.ticker), formatMoney(b.initialFixing), formatMoney(b.strikePrice),
+        formatMoney(b.koPrice), formatMoney(b.kiPrice)];
+    }));
+
+  renderStats([
+    { label: "Underlyings in Basket", value: String(calc.basket.length) },
+    { label: "Strike Level %", value: (note.strikeLevelPct || 0).toFixed(1) },
+    { label: "KO Level %", value: (note.koLevelPct || 0).toFixed(1) },
+    { label: "KI Level %", value: (note.kiLevelPct || 0).toFixed(1) },
+    { label: "Knock-Out Recorded", value: calc.knockedOut ? fmtDate(calc.koDate) : "No" },
+  ], "barrierStatsRow");
+
+  const today = new Date();
+  const scheduleRows = calc.rows.map(function (r) {
+    const status = r.isStub ? pill("KO stub (pro-rated)", "status-ko")
+      : r.end <= today ? pill("Paid", "status-live")
+      : pill("Scheduled", "status-none");
+    return [String(r.n), fmtDate(r.start), fmtDate(r.end), String(r.days),
+      formatMoney(r.payment), formatMoney(r.cumulative), status];
+  }).concat(calc.cancelledRows.map(function (r) {
+    return ["<span class='muted'>" + r.n + "</span>", fmtDate(r.start), fmtDate(r.end),
+      String(r.days), "<span class='muted'>" + formatMoney(r.payment) + "</span>", "—",
+      pill("Cancelled by KO", "status-none")];
+  }));
+  fillTable("scheduleTable",
+    ["#", "Period Start", "Period End", "Days", "Coupon Payment", "Cumulative", "Status"],
+    scheduleRows);
+
+  document.getElementById("resultsPanel").style.display = "block";
+}
+
+function saveCurrentNote() {
+  const dateProblem = formDateProblem();
+  if (dateProblem) {
+    document.getElementById("saveFeedback").textContent = dateProblem;
+    return;
+  }
+  const note = readForm();
+  const problem = bondProblem(note) || fundProblem(note);
+  if (problem) {
+    document.getElementById("saveFeedback").textContent = problem;
+    return;
+  }
+  const notes = loadNotes();
+  const idx = notes.findIndex(function (n) { return n.id === note.id; });
+  if (idx >= 0) notes[idx] = note; else notes.push(note);
+  saveNotes(notes);
+  currentEditId = note.id;
+  document.getElementById("saveFeedback").textContent =
+    "Saved \"" + noteLabel(note) + "\" to the book" + (storageOK ? "." : " (in memory only — storage blocked; use Export).");
+  renderPortfolio();
+}
+
+// A plain download is unreliable from an installed web app on iPad, so on touch devices the book goes
+// through the share sheet (Save to Files, AirDrop, Mail ...). Elsewhere it is an ordinary download.
+function downloadBook(name, text) {
+  const blob = new Blob([text], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function exportBook() {
+  const name = "fcn-book-" + formatDate(new Date()) + ".json";
+  const text = JSON.stringify(loadNotes(), null, 2);
+  // Native iPad app: a web view cannot download files, so ask the app to open the share sheet.
+  try {
+    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.exportFile) {
+      window.webkit.messageHandlers.exportFile.postMessage({ name: name, text: text });
+      return;
+    }
+  } catch (e) { /* not inside the app: carry on */ }
+  try {
+    if (dpCoarse() && navigator.share && navigator.canShare) {
+      const file = new File([text], name, { type: "application/json" });
+      if (navigator.canShare({ files: [file] })) {
+        navigator.share({ files: [file], title: "Passive Income Tracker book" }).catch(function (err) {
+          if (!err || err.name !== "AbortError") downloadBook(name, text);   // cancelled = do nothing
+        });
+        return;
+      }
+    }
+  } catch (e) { /* fall through to a normal download */ }
+  downloadBook(name, text);
+}
+
+function importBook(file) {
+  const reader = new FileReader();
+  reader.onload = function () {
+    try {
+      const parsed = JSON.parse(reader.result);
+      if (Array.isArray(parsed)) { saveNotes(parsed); renderPortfolio(); }
+    } catch (e) { /* ignore malformed file */ }
+  };
+  reader.readAsText(file);
+}
+
+function seedIfEmpty() {
+  if (loadNotes().length) return;
+  saveNotes([{
+    id: "sample1", name: "NVDA-META FCN (sample)", ticker: "", noteType: "FCN", currency: "USD",
+    notional: 1000000, couponRate: 9, frequency: 12, tenorMonths: 12,
+    issueDate: formatDate(new Date()), dayCount: "30/360",
+    redemptionPct: 100, issuePricePct: 100, purchasePricePct: 100,
+    strikeLevelPct: 100, koLevelPct: 105, kiLevelPct: 70,
+    basket: [
+      { ticker: "NVDA.UW", initialFixing: 213.66 },
+      { ticker: "META.UW", initialFixing: 624.52 },
+    ],
+  }]);
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  seedIfEmpty();
+
+  document.querySelectorAll(".tab").forEach(function (t) {
+    t.addEventListener("click", function () { switchTab(t.dataset.tab); });
+  });
+
+  document.getElementById("addUnderlyingBtn").addEventListener("click", function () { addUnderlyingRow("", 100); });
+  document.getElementById("calcBtn").addEventListener("click", renderEditorResults);
+  ["strikeLevel", "koLevel", "kiLevel"].forEach(function (id) {
+    document.getElementById(id).addEventListener("input", recomputeBasketPrices);
+  });
+  document.getElementById("saveNoteBtn").addEventListener("click", saveCurrentNote);
+  document.getElementById("cancelEditBtn").addEventListener("click", function () { switchTab("portfolio"); });
+
+  document.getElementById("newNoteBtn").addEventListener("click", function () {
+    currentEditId = null;
+    writeForm({});
+    switchTab("editor");
+  });
+  document.getElementById("newBondBtn").addEventListener("click", function () {
+    currentEditId = null;
+    writeForm(bondDefaults());
+    switchTab("editor");
+  });
+  document.getElementById("newFundBtn").addEventListener("click", function () {
+    currentEditId = null;
+    writeForm(fundDefaults());
+    switchTab("editor");
+  });
+  document.getElementById("instrument").addEventListener("change", function () {
+    switchInstrument(val("instrument"));
+  });
+
+  document.getElementById("exportBtn").addEventListener("click", exportBook);
+  document.getElementById("importBtn").addEventListener("click", function () {
+    document.getElementById("importFile").click();
+  });
+  document.getElementById("importFile").addEventListener("change", function (e) {
+    if (e.target.files[0]) importBook(e.target.files[0]);
+  });
+
+  document.getElementById("notesTable").addEventListener("click", function (e) {
+    const editId = e.target.getAttribute("data-edit");
+    const delId = e.target.getAttribute("data-del");
+    if (editId) {
+      const note = loadNotes().find(function (n) { return n.id === editId; });
+      if (note) { currentEditId = note.id; writeForm(note); switchTab("editor"); }
+    } else if (delId) {
+      const note = loadNotes().find(function (n) { return n.id === delId; });
+      const label = note ? noteLabel(note) : "this note";
+      if (!confirm('Delete "' + label + '" from the book? This cannot be undone.')) return;
+      saveNotes(loadNotes().filter(function (n) { return n.id !== delId; }));
+      if (currentEditId === delId) currentEditId = null;
+      renderPortfolio();
+    }
+  });
+
+  document.getElementById("parseBtn").addEventListener("click", function () {
+    const text = val("quickEntry").trim();
+    if (!text) return;
+    const p = parseNoteDescription(text);
+    if (p.instrument && p.instrument !== val("instrument")) switchInstrument(p.instrument);
+    const bond = isBondForm();
+    const fund = isFundForm();
+    const notes = p.notes.slice();
+
+    if (p.currency) setVal("currency", p.currency);
+    if (p.bank) setVal("bank", p.bank);
+
+    if (fund) {
+      if (p.fundName) setVal("noteName", p.fundName);
+      if (p.isin) setVal("ticker", p.isin);
+      if (p.units != null) setVal("units", p.units);
+      if (p.dividendPerUnit != null) setVal("dividendPerUnit", p.dividendPerUnit);
+      if (p.invested != null) setVal("investedAmount", p.invested);
+      if (p.frequency != null) setVal("frequency", String(p.frequency));
+      if (p.issueDate) setDate("issueDate", p.issueDate);
+      if (p.terminateDate) setDate("terminateDate", p.terminateDate);
+      if (p.units == null) notes.push("Units not detected — enter the units held.");
+      if (p.dividendPerUnit == null) notes.push("Dividend per unit not detected — enter it.");
+    } else if (bond) {
+      if (p.issuer) setVal("issuer", p.issuer);
+      if (p.isin) setVal("ticker", p.isin);
+      if (p.notional != null) setVal("notional", p.notional);
+      if (p.couponRate != null) setVal("couponRate", p.couponRate);
+      if (p.frequency != null) setVal("frequency", String(p.frequency));
+      if (p.issueDate) setDate("issueDate", p.issueDate);
+      if (p.maturityDate) {
+        setDate("maturityDate", p.maturityDate);
+      } else if (p.tenorMonths != null) {
+        setDate("maturityDate", formatDate(addMonths(parseDateInput(readDate("issueDate")), p.tenorMonths)));
+      } else {
+        notes.push("Maturity not detected — enter a maturity date.");
+      }
+      if (p.terminateDate) setDate("terminateDate", p.terminateDate);
+    } else {
+      if (p.frequency != null) setVal("frequency", String(p.frequency));
+      if (p.couponRate != null) setVal("couponRate", p.couponRate);
+      if (p.notional != null) setVal("notional", p.notional);
+      if (p.purchasePrice != null) setVal("purchasePrice", p.purchasePrice);
+      if (p.tenorMonths != null) setVal("tenor", p.tenorMonths);
+      if (p.noteType) setVal("noteType", p.noteType);
+      if (p.tickers && p.tickers.length) {
+        document.getElementById("underlyingRows").innerHTML = "";
+        p.tickers.forEach(function (t) { addUnderlyingRow(t, 100); });
+      }
+    }
+    document.getElementById("parseFeedback").textContent = notes.length
+      ? notes.join(" ")
+      : (fund
+        ? "Auto-filled fund terms. Check the purchase date and dividend per unit, then Calculate and Save to Book."
+        : bond
+        ? "Auto-filled bond terms. Check the issue date, maturity and nominal, then Calculate and Save to Book."
+        : "Auto-filled note terms and basket. Enter the initial fixing for each underlying, then Calculate and Save to Book.");
+  });
+
+  ["issueDate", "maturityDate", "terminateDate", "koDate"].forEach(function (id) {
+    const el = document.getElementById(id);
+    el.addEventListener("input", function () {
+      const masked = maskDateValue(el.value);
+      if (masked !== el.value) el.value = masked;
+    });
+  });
+
+  initDatePicker();
+
+  // Ask the browser not to evict this book when storage runs low (best effort; iOS may ignore it).
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {}); } catch (e) { /* optional */ }
+
+  writeForm({});
+  switchTab("portfolio");
+});
+
+</script>
+<script>
+// Offline support: only over http(s); opening the file directly skips it.
+if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) {
+  window.addEventListener("load", function () { navigator.serviceWorker.register("./sw.js").catch(function () {}); });
+}
+</script>
+</body>
+</html>
