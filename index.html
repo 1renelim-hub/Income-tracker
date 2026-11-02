@@ -242,6 +242,9 @@ td.empty {
   border-radius: 10px; padding: 10px 14px; color: #ff9f0a; }
 .backup-bar .secondary-btn { margin-top: 0; }
 
+.price-input.manual { border-color: var(--accent-blue); }
+.basket-hint { margin: 10px 0 0; font-size: 12px; color: var(--muted); }
+
 .fx-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
 .fx-actions .secondary-btn { margin-top: 0; }
 #fxStatus { margin: 0; font-size: 13px; }
@@ -746,6 +749,7 @@ button, select, input, label { touch-action: manipulation; }   /* no double-tap-
           <tbody id="underlyingRows"></tbody>
         </table>
       </div>
+      <p class="basket-hint">Strike, KO and KI prices are calculated from the initial fixing and the levels above. Type a price to override it (shown with a blue border); clear the field to go back to the calculated price.</p>
       <button id="addUnderlyingBtn" class="secondary-btn">Add Underlying</button>
     </section>
 
@@ -908,8 +912,8 @@ function buildSchedule(note) {
   return { rows: rows, periods: periods };
 }
 
-// Trigger prices are derived purely from the initial fixing and the barrier
-// levels — no live/latest price is tracked. The actual knock-out EVENT is
+// Trigger prices default to the initial fixing x the barrier levels, unless a price was typed in
+// by hand for that underlying (u.strikePrice / u.koPrice / u.kiPrice). No live/latest price is tracked. The actual knock-out EVENT is
 // recorded manually via note.koDate (see computeNote).
 function computeBasket(note) {
   const strikePct = note.strikeLevelPct || 0;
@@ -919,9 +923,9 @@ function computeBasket(note) {
     return {
       ticker: u.ticker,
       initialFixing: u.initialFixing,
-      strikePrice: u.initialFixing * strikePct / 100,
-      koPrice: u.initialFixing * koPct / 100,
-      kiPrice: u.initialFixing * kiPct / 100,
+      strikePrice: u.strikePrice > 0 ? u.strikePrice : u.initialFixing * strikePct / 100,
+      koPrice: u.koPrice > 0 ? u.koPrice : u.initialFixing * koPct / 100,
+      kiPrice: u.kiPrice > 0 ? u.kiPrice : u.initialFixing * kiPct / 100,
     };
   });
 }
@@ -2509,18 +2513,35 @@ function formDateProblem() {
   return null;
 }
 
-function addUnderlyingRow(ticker, initialFixing) {
+// Strike / KO / KI price cells: [input class, stored field name, level input id].
+const BASKET_PRICE_FIELDS = [
+  ["strike-input", "strikePrice", "strikeLevel"],
+  ["ko-input", "koPrice", "koLevel"],
+  ["ki-input", "kiPrice", "kiLevel"],
+];
+
+function addUnderlyingRow(ticker, initialFixing, overrides) {
   const tr = document.createElement("tr");
   tr.innerHTML =
     '<td><input type="text" class="row-input ticker-input" placeholder="e.g. AAPL.UW"></td>' +
     '<td><input type="number" class="row-input fixing-input" min="0" step="0.01"></td>' +
-    '<td class="calc-cell strike-cell">—</td>' +
-    '<td class="calc-cell ko-cell">—</td>' +
-    '<td class="calc-cell ki-cell">—</td>' +
+    '<td><input type="number" class="row-input price-input strike-input" min="0" step="any" inputmode="decimal" placeholder="—"></td>' +
+    '<td><input type="number" class="row-input price-input ko-input" min="0" step="any" inputmode="decimal" placeholder="—"></td>' +
+    '<td><input type="number" class="row-input price-input ki-input" min="0" step="any" inputmode="decimal" placeholder="—"></td>' +
     '<td><button type="button" class="mini-btn danger remove-btn">Remove</button></td>';
   tr.querySelector(".ticker-input").value = ticker || "";
   tr.querySelector(".fixing-input").value = initialFixing == null ? 100 : initialFixing;
   tr.querySelector(".fixing-input").addEventListener("input", recomputeBasketPrices);
+  BASKET_PRICE_FIELDS.forEach(function (f) {
+    const inp = tr.querySelector("." + f[0]);
+    const saved = overrides && overrides[f[1]];
+    if (saved > 0) { inp.value = saved; inp.dataset.manual = "1"; inp.classList.add("manual"); }
+    inp.addEventListener("input", function () {
+      const typed = inp.value.trim() !== "" && parseFloat(inp.value) > 0;
+      if (typed) { inp.dataset.manual = "1"; inp.classList.add("manual"); }
+      else { delete inp.dataset.manual; inp.classList.remove("manual"); recomputeBasketPrices(); }
+    });
+  });
   tr.querySelector(".remove-btn").addEventListener("click", function () { tr.remove(); });
   document.getElementById("underlyingRows").appendChild(tr);
   recomputeBasketPrices();
@@ -2534,11 +2555,13 @@ function recomputeBasketPrices() {
   document.querySelectorAll("#underlyingRows tr").forEach(function (tr) {
     const fixing = parseFloat(tr.querySelector(".fixing-input").value) || 0;
     const show = function (sel, pct) {
-      tr.querySelector(sel).textContent = (fixing > 0 && pct > 0) ? formatMoney(fixing * pct / 100) : "—";
+      const inp = tr.querySelector(sel);
+      if (inp.dataset.manual) return;   // a hand-typed price is left alone
+      inp.value = (fixing > 0 && pct > 0) ? String(parseFloat((fixing * pct / 100).toFixed(4))) : "";
     };
-    show(".strike-cell", strikePct);
-    show(".ko-cell", koPct);
-    show(".ki-cell", kiPct);
+    show(".strike-input", strikePct);
+    show(".ko-input", koPct);
+    show(".ki-input", kiPct);
   });
 }
 
@@ -2548,7 +2571,13 @@ function readBasket() {
     const ticker = tr.querySelector(".ticker-input").value.trim();
     const initialFixing = parseFloat(tr.querySelector(".fixing-input").value) || 0;
     if (ticker || initialFixing) {
-      basket.push({ ticker: ticker || "Underlying " + (basket.length + 1), initialFixing: initialFixing });
+      const item = { ticker: ticker || "Underlying " + (basket.length + 1), initialFixing: initialFixing };
+      BASKET_PRICE_FIELDS.forEach(function (f) {
+        const inp = tr.querySelector("." + f[0]);
+        const v = parseFloat(inp.value);
+        if (inp.dataset.manual && v > 0) item[f[1]] = v;
+      });
+      basket.push(item);
     }
   });
   return basket;
@@ -2658,7 +2687,7 @@ function writeForm(note) {
   setDate("koDate", note.koDate);
   document.getElementById("underlyingRows").innerHTML = "";
   (note.basket && note.basket.length ? note.basket : [{ ticker: "", initialFixing: 100 }])
-    .forEach(function (b) { addUnderlyingRow(b.ticker, b.initialFixing); });
+    .forEach(function (b) { addUnderlyingRow(b.ticker, b.initialFixing, b); });
   recomputeBasketPrices();
   applyInstrumentUI();
   document.getElementById("resultsPanel").style.display = "none";
