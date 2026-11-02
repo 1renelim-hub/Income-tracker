@@ -236,6 +236,17 @@ td.empty {
 
 .flag { color: #ff9f0a; }
 
+.backup-bar { margin-top: 14px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  font-size: 13px; color: var(--muted); }
+.backup-bar.due { background: rgba(255,159,10,0.12); border: 1px solid rgba(255,159,10,0.4);
+  border-radius: 10px; padding: 10px 14px; color: #ff9f0a; }
+.backup-bar .secondary-btn { margin-top: 0; }
+
+.fx-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+.fx-actions .secondary-btn { margin-top: 0; }
+#fxStatus { margin: 0; font-size: 13px; }
+#fxStatus.err { color: #ff9f0a; }
+
 .status-live { background: rgba(52,199,89,0.18); color: #30d158; }
 
 .calc-cell {
@@ -541,6 +552,7 @@ button, select, input, label { touch-action: manipulation; }   /* no double-tap-
       <h2>Book Summary</h2>
       <div class="stats" id="summaryStats"></div>
       <p class="sub flag" id="storageNote"></p>
+      <div class="backup-bar" id="backupBar"></div>
     </section>
 
     <section class="panel">
@@ -564,6 +576,10 @@ button, select, input, label { touch-action: manipulation; }   /* no double-tap-
       <h2>FX Rates to SGD</h2>
       <div class="grid" id="fxRows"></div>
       <p class="sub" id="fxNote"></p>
+      <div class="fx-actions">
+        <button id="fxRefreshBtn" class="secondary-btn" type="button">Refresh rates</button>
+        <p class="sub" id="fxStatus" role="status"></p>
+      </div>
     </section>
 
     <section class="panel">
@@ -1229,6 +1245,11 @@ function computeFund(note, asOf) {
 
 const STORAGE_KEY = "fcn_tracker_notes_v1";
 const FX_KEY = "fcn_tracker_fx_v1";
+const EXPORT_KEY = "fcn_tracker_last_export_v1";
+const CHANGE_KEY = "fcn_tracker_last_change_v1";
+const BACKUP_DUE_DAYS = 7;
+const FX_META_KEY = "fcn_tracker_fx_meta_v1";
+const FX_URL = "https://api.frankfurter.dev/v1/latest?base=SGD";
 
 // SGD per 1 unit of currency. Seeded from mid-market rates on 2026-10-30;
 // edit them in the FX panel — they are assumptions, not a live feed.
@@ -1258,6 +1279,7 @@ function saveNotes(notes) {
   } catch (e) {
     storageOK = false;
   }
+  prefSet(CHANGE_KEY, String(Date.now()));
 }
 
 function loadFx() {
@@ -1364,6 +1386,7 @@ function renderPortfolio() {
   renderNotesTable(computed);
   renderFxPanel(computed);
   renderIncomeSummary(computed);
+  renderBackupBar();
 }
 
 function bookCurrencies(computed) {
@@ -1414,9 +1437,59 @@ function renderFxPanel(computed) {
       renderPortfolio();
     });
   });
-  document.getElementById("fxNote").textContent =
-    "Rates are SGD per 1 unit, seeded from mid-market levels on " + fmtIso(FX_ASOF) +
-    ". They are stored assumptions, not a live feed — edit any rate and the SGD totals recalculate.";
+  let meta = null;
+  try { meta = JSON.parse(prefGet(FX_META_KEY, "null")); } catch (e) { meta = null; }
+  document.getElementById("fxNote").textContent = meta && meta.date
+    ? "Rates are SGD per 1 unit. Last refreshed from the European Central Bank reference rates dated " + fmtIso(meta.date) +
+      " (end-of-day, not live trading prices). You can still edit any rate and the SGD totals recalculate."
+    : "Rates are SGD per 1 unit, seeded from mid-market levels on " + fmtIso(FX_ASOF) +
+      ". Tap Refresh rates for current end-of-day rates, or edit any rate and the SGD totals recalculate.";
+}
+
+// Fetch current end-of-day reference rates (needs a connection). The service quotes foreign
+// currency per 1 SGD, so each rate is inverted to get SGD per 1 unit. On any failure the saved
+// rates are left exactly as they were.
+function parseFxResponse(data, wanted) {
+  if (!data || typeof data !== "object" || !data.rates || typeof data.date !== "string") throw new Error("bad response");
+  const out = {};
+  wanted.forEach(function (ccy) {
+    if (ccy === "SGD") return;
+    const perSgd = data.rates[ccy];
+    if (typeof perSgd === "number" && perSgd > 0) out[ccy] = Math.round((1 / perSgd) * 1e6) / 1e6;
+  });
+  if (!Object.keys(out).length) throw new Error("no usable rates");
+  return { rates: out, date: data.date };
+}
+
+function refreshFxRates() {
+  const btn = document.getElementById("fxRefreshBtn");
+  const status = document.getElementById("fxStatus");
+  const setStatus = function (text, isErr) { status.textContent = text; status.className = "sub" + (isErr ? " err" : ""); };
+  const wanted = {};
+  Object.keys(loadFx()).forEach(function (c) { wanted[c] = true; });
+  loadNotes().forEach(function (n) { if (n && n.currency) wanted[n.currency] = true; });
+
+  btn.disabled = true;
+  setStatus("Fetching current rates…", false);
+  const ctl = (typeof AbortController !== "undefined") ? new AbortController() : null;
+  const timer = ctl ? setTimeout(function () { ctl.abort(); }, 12000) : null;
+
+  fetch(FX_URL, ctl ? { signal: ctl.signal, cache: "no-store" } : { cache: "no-store" })
+    .then(function (res) { if (!res.ok) throw new Error("HTTP " + res.status); return res.json(); })
+    .then(function (data) {
+      const parsed = parseFxResponse(data, Object.keys(wanted));
+      saveFx(Object.assign({}, loadFx(), parsed.rates));
+      prefSet(FX_META_KEY, JSON.stringify({ date: parsed.date, fetchedAt: Date.now() }));
+      renderPortfolio();
+      setStatus("Updated " + Object.keys(parsed.rates).length + " rates (dated " + fmtIso(parsed.date) + ").", false);
+    })
+    .catch(function () {
+      setStatus("Couldn’t reach the rate service. Your saved rates are unchanged.", true);
+    })
+    .then(function () {
+      if (timer) clearTimeout(timer);
+      btn.disabled = false;
+    });
 }
 
 function renderSummary(computed) {
@@ -2700,6 +2773,45 @@ function saveCurrentNote() {
   renderPortfolio();
 }
 
+// Backup reminder: remember when the book was last exported and when it last changed.
+function markExported() {
+  prefSet(EXPORT_KEY, String(Date.now()));
+  renderBackupBar();
+}
+
+function renderBackupBar() {
+  const bar = document.getElementById("backupBar");
+  if (!bar) return;
+  const lastExport = Number(prefGet(EXPORT_KEY, "0")) || 0;
+  const lastChange = Number(prefGet(CHANGE_KEY, "0")) || 0;
+  const dirty = lastChange > 0 && lastChange > lastExport;
+  const days = lastExport ? Math.floor((Date.now() - lastExport) / 86400000) : null;
+  const due = dirty && (lastExport === 0 || days >= BACKUP_DUE_DAYS);
+
+  bar.textContent = "";
+  bar.className = "backup-bar" + (due ? " due" : "");
+  const msg = document.createElement("span");
+  if (due) {
+    msg.textContent = lastExport
+      ? "Time to back up: your last backup was " + days + " days ago and the book has changed since."
+      : "You haven’t backed up this book yet. Save a copy to Files so it can’t be lost.";
+  } else if (lastExport) {
+    msg.textContent = "Last backup: " + new Date(lastExport).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) +
+      (dirty ? " (changes since)" : " (up to date)");
+  } else {
+    msg.textContent = "No backup yet.";
+  }
+  bar.appendChild(msg);
+  if (due) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "secondary-btn";
+    btn.textContent = "Back up now";
+    btn.addEventListener("click", exportBook);
+    bar.appendChild(btn);
+  }
+}
+
 // A plain download is unreliable from an installed web app on iPad, so on touch devices the book goes
 // through the share sheet (Save to Files, AirDrop, Mail ...). Elsewhere it is an ordinary download.
 function downloadBook(name, text) {
@@ -2718,6 +2830,7 @@ function exportBook() {
   try {
     if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.exportFile) {
       window.webkit.messageHandlers.exportFile.postMessage({ name: name, text: text });
+      markExported();
       return;
     }
   } catch (e) { /* not inside the app: carry on */ }
@@ -2725,14 +2838,15 @@ function exportBook() {
     if (dpCoarse() && navigator.share && navigator.canShare) {
       const file = new File([text], name, { type: "application/json" });
       if (navigator.canShare({ files: [file] })) {
-        navigator.share({ files: [file], title: "Passive Income Tracker book" }).catch(function (err) {
-          if (!err || err.name !== "AbortError") downloadBook(name, text);   // cancelled = do nothing
+        navigator.share({ files: [file], title: "Passive Income Tracker book" }).then(markExported).catch(function (err) {
+          if (!err || err.name !== "AbortError") { downloadBook(name, text); markExported(); }   // cancelled = do nothing
         });
         return;
       }
     }
   } catch (e) { /* fall through to a normal download */ }
   downloadBook(name, text);
+  markExported();
 }
 
 function importBook(file) {
@@ -2740,7 +2854,7 @@ function importBook(file) {
   reader.onload = function () {
     try {
       const parsed = JSON.parse(reader.result);
-      if (Array.isArray(parsed)) { saveNotes(parsed); renderPortfolio(); }
+      if (Array.isArray(parsed)) { saveNotes(parsed); markExported(); renderPortfolio(); }
     } catch (e) { /* ignore malformed file */ }
   };
   reader.readAsText(file);
@@ -2759,6 +2873,7 @@ function seedIfEmpty() {
       { ticker: "META.UW", initialFixing: 624.52 },
     ],
   }]);
+  prefSet(CHANGE_KEY, "0");   // the sample note is not a change worth backing up
 }
 
 document.addEventListener("DOMContentLoaded", function () {
@@ -2796,6 +2911,7 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   document.getElementById("exportBtn").addEventListener("click", exportBook);
+  document.getElementById("fxRefreshBtn").addEventListener("click", refreshFxRates);
   document.getElementById("importBtn").addEventListener("click", function () {
     document.getElementById("importFile").click();
   });
