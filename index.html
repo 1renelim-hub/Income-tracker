@@ -242,6 +242,11 @@ td.empty {
   border-radius: 10px; padding: 10px 14px; color: #ff9f0a; }
 .backup-bar .secondary-btn { margin-top: 0; }
 
+th.sortable { cursor: pointer; user-select: none; -webkit-user-select: none; white-space: nowrap; }
+th.sortable .arrow { display: inline-block; width: 1em; margin-left: 4px; opacity: 0.35; font-size: 0.8em; }
+th.sortable.sorted .arrow { opacity: 1; }
+th.sortable.sorted { color: var(--text); }
+
 .price-input.manual { border-color: var(--accent-blue); }
 .basket-hint { margin: 10px 0 0; font-size: 12px; color: var(--muted); }
 
@@ -559,23 +564,6 @@ button, select, input, label { touch-action: manipulation; }   /* no double-tap-
     </section>
 
     <section class="panel">
-      <div class="panel-head">
-        <h2>Holdings in Book</h2>
-        <div class="btn-row">
-          <button id="newNoteBtn" class="secondary-btn">New Note</button>
-          <button id="newBondBtn" class="secondary-btn">New Bond</button>
-          <button id="newFundBtn" class="secondary-btn">New Income Fund</button>
-          <button id="exportBtn" class="secondary-btn">Export</button>
-          <button id="importBtn" class="secondary-btn">Import</button>
-          <input type="file" id="importFile" accept="application/json,.json" hidden>
-        </div>
-      </div>
-      <div class="table-wrap">
-        <table id="notesTable"><thead></thead><tbody></tbody></table>
-      </div>
-    </section>
-
-    <section class="panel">
       <h2>FX Rates to SGD</h2>
       <div class="grid" id="fxRows"></div>
       <p class="sub" id="fxNote"></p>
@@ -611,6 +599,23 @@ button, select, input, label { touch-action: manipulation; }   /* no double-tap-
         <table id="instrumentTable"><thead></thead><tbody></tbody></table>
       </div>
       <p class="sub" id="incomeNote"></p>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Holdings in Book</h2>
+        <div class="btn-row">
+          <button id="newNoteBtn" class="secondary-btn">New Note</button>
+          <button id="newBondBtn" class="secondary-btn">New Bond</button>
+          <button id="newFundBtn" class="secondary-btn">New Income Fund</button>
+          <button id="exportBtn" class="secondary-btn">Export</button>
+          <button id="importBtn" class="secondary-btn">Import</button>
+          <input type="file" id="importFile" accept="application/json,.json" hidden>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="notesTable"><thead></thead><tbody></tbody></table>
+      </div>
     </section>
   </div>
 
@@ -1588,6 +1593,41 @@ function renderSummary(computed) {
   document.getElementById("storageNote").textContent = msgs.join(" ");
 }
 
+// ---- Holdings table sorting: click a header to sort ascending, again for descending, a third time to
+// return to the order the holdings were added in. The choice is remembered on this device.
+const SORT_KEY = "fcn_tracker_sort_v1";
+let notesSort = null;
+
+function getNotesSort() {
+  if (notesSort) return notesSort;
+  const parts = prefGet(SORT_KEY, "-1:1").split(":");
+  const col = parseInt(parts[0], 10);
+  notesSort = { col: isNaN(col) ? -1 : col, dir: parts[1] === "-1" ? -1 : 1 };
+  return notesSort;
+}
+
+function cycleNotesSort(col) {
+  const cur = getNotesSort();
+  if (cur.col !== col) notesSort = { col: col, dir: 1 };
+  else if (cur.dir === 1) notesSort = { col: col, dir: -1 };
+  else notesSort = { col: -1, dir: 1 };
+  prefSet(SORT_KEY, notesSort.col + ":" + notesSort.dir);
+  renderPortfolio();
+}
+
+function sortTime(d) {
+  if (!d) return null;
+  const v = (d instanceof Date ? d : new Date(d)).getTime();
+  return isNaN(v) ? null : v;
+}
+
+function compareSortKeys(a, b) {
+  const aNull = a == null || a === "", bNull = b == null || b === "";
+  if (aNull || bNull) return aNull === bNull ? 0 : (aNull ? 1 : -1);   // blanks handled by the caller
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
+}
+
 function renderNotesTable(computed) {
   const disp = getDisplayCcy();
   const native = disp === "NATIVE";
@@ -1595,6 +1635,7 @@ function renderNotesTable(computed) {
   const headers = ["Holding", "Bank", "Type", "Ccy", "Invested Amount", "Coupon %", "Freq", "Issue / Buy", "Ends",
     "Next Coupon", "Annual Income", "Realised Income", "Received", convCol,
     "Yield %", "YTM %", "KO / KI %", "Status", ""];
+  const sortKeys = [];
   const rows = computed.map(function (c) {
     const note = c.note, calc = c.calc;
     const isBond = note.instrument === "BOND";
@@ -1617,6 +1658,38 @@ function renderNotesTable(computed) {
     const realised = formatMoney(calc.totalCoupon) +
       (isFund ? "<br><span class='muted'>incl. 12m projection</span>" : "") +
       (calc.incomeForgone > 0 ? "<br><span class='muted'>forgone " + formatMoney(calc.incomeForgone) + "</span>" : "");
+    const endDate = isFund ? calc.sellDate
+      : calc.knockedOut ? calc.koDate
+      : calc.terminated ? calc.termDate
+      : calc.maturityDate;
+    const statusText = calc.knockedOut ? "Knocked Out"
+      : (calc.matured && isFund) ? "Sold"
+      : (calc.matured && calc.terminated) ? "Terminated"
+      : calc.matured ? "Matured"
+      : calc.koUnrecorded ? "KO Barrier Hit"
+      : calc.kiTriggered ? "KI Hit"
+      : "Live";
+    sortKeys.push([
+      noteLabel(note).toLowerCase(),
+      (note.bank || "").trim().toLowerCase() || null,
+      note.noteType || "FCN",
+      ccy,
+      (isFund && !calc.hasInvested) ? null : (note.notional || 0),
+      isFund ? null : (note.couponRate || 0),
+      Number(note.frequency) || 0,
+      note.issueDate || null,
+      sortTime(endDate),
+      calc.nextCoupon ? sortTime(calc.nextCoupon.end) : null,
+      calc.annualCoupon,
+      calc.totalCoupon,
+      calc.incomeReceived,
+      annualConv == null ? null : annualConv,
+      (isBond || (isFund && !calc.hasInvested)) ? null : calc.currentYield,
+      calc.ytmPct == null ? null : calc.ytmPct,
+      (isBond || isFund) ? null : (note.koLevelPct || 0) * 1000 + (note.kiLevelPct || 0),
+      statusText,
+      null,
+    ]);
     return [
       "<strong>" + esc(noteLabel(note)) + "</strong><br><span class='muted'>" + esc(tickers) + "</span>",
       note.bank && note.bank.trim() ? esc(note.bank.trim()) : "<span class='muted'>Unassigned</span>",
@@ -1642,7 +1715,29 @@ function renderNotesTable(computed) {
       "<button class='mini-btn danger' data-del='" + esc(note.id) + "'>Delete</button>",
     ];
   });
-  fillTable("notesTable", headers, rows);
+  const sort = getNotesSort();
+  let order = rows.map(function (_, i) { return i; });
+  if (sort.col >= 0 && sort.col < headers.length - 1) {
+    order.sort(function (x, y) {
+      const a = sortKeys[x][sort.col], b = sortKeys[y][sort.col];
+      const aBlank = a == null || a === "", bBlank = b == null || b === "";
+      if (aBlank || bBlank) return aBlank === bBlank ? x - y : (aBlank ? 1 : -1);   // blanks always last
+      const d = compareSortKeys(a, b) * sort.dir;
+      return d !== 0 ? d : x - y;
+    });
+  }
+  fillTable("notesTable", headers, order.map(function (i) { return rows[i]; }));
+
+  document.querySelectorAll("#notesTable thead th").forEach(function (th, i) {
+    if (i >= headers.length - 1) return;   // the Edit/Delete column is not sortable
+    const active = sort.col === i;
+    th.className = "sortable" + (active ? " sorted" : "");
+    th.setAttribute("data-sort-col", String(i));
+    th.setAttribute("role", "button");
+    th.setAttribute("tabindex", "0");
+    th.setAttribute("aria-sort", active ? (sort.dir === 1 ? "ascending" : "descending") : "none");
+    th.insertAdjacentHTML("beforeend", '<span class="arrow" aria-hidden="true">' + (active ? (sort.dir === 1 ? "▲" : "▼") : "↕") + "</span>");
+  });
 }
 
 
@@ -2948,7 +3043,17 @@ document.addEventListener("DOMContentLoaded", function () {
     if (e.target.files[0]) importBook(e.target.files[0]);
   });
 
+  const sortFromHeader = function (e) {
+    const th = e.target.closest ? e.target.closest("th[data-sort-col]") : null;
+    if (!th) return false;
+    cycleNotesSort(parseInt(th.getAttribute("data-sort-col"), 10));
+    return true;
+  };
+  document.getElementById("notesTable").addEventListener("keydown", function (e) {
+    if (e.key === "Enter" || e.key === " ") { if (sortFromHeader(e)) e.preventDefault(); }
+  });
   document.getElementById("notesTable").addEventListener("click", function (e) {
+    if (sortFromHeader(e)) return;
     const editId = e.target.getAttribute("data-edit");
     const delId = e.target.getAttribute("data-del");
     if (editId) {
