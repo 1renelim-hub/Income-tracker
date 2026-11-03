@@ -242,6 +242,12 @@ td.empty {
   border-radius: 10px; padding: 10px 14px; color: #ff9f0a; }
 .backup-bar .secondary-btn { margin-top: 0; }
 
+.filter-cell { padding: 4px 6px; background: #17171b; }
+.filter-cell .row-input { min-width: 92px; padding: 5px 7px; }
+.notes-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 10px; }
+.notes-bar .secondary-btn { margin-top: 0; }
+#notesCount { margin: 0; font-size: 13px; }
+
 th.sortable { cursor: pointer; user-select: none; -webkit-user-select: none; white-space: nowrap; }
 th.sortable .arrow { display: inline-block; width: 1em; margin-left: 4px; opacity: 0.35; font-size: 0.8em; }
 th.sortable.sorted .arrow { opacity: 1; }
@@ -612,6 +618,10 @@ button, select, input, label { touch-action: manipulation; }   /* no double-tap-
           <button id="importBtn" class="secondary-btn">Import</button>
           <input type="file" id="importFile" accept="application/json,.json" hidden>
         </div>
+      </div>
+      <div class="notes-bar">
+        <p class="sub" id="notesCount"></p>
+        <button id="clearFiltersBtn" class="secondary-btn" type="button" hidden>Clear filters</button>
       </div>
       <div class="table-wrap">
         <table id="notesTable"><thead></thead><tbody></tbody></table>
@@ -1628,6 +1638,110 @@ function compareSortKeys(a, b) {
   return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
 }
 
+// ---- Holdings table filters: one box per column under the headers. Text boxes match anywhere in the
+// column's text; number columns also accept >, <, >=, <= or = (for example >1000). Dropdown columns
+// match exactly. Filters apply on top of the current sort and reset when the app is reopened.
+const NOTES_SELECT_COLS = [1, 2, 3, 6, 17];            // Bank, Type, Ccy, Freq, Status
+const NOTES_NUMERIC_COLS = [4, 5, 10, 11, 12, 13, 14, 15];
+let notesFilters = [];
+let notesView = null;   // { headers, rows, keys, texts, order } for the table currently shown
+
+function cellText(html) {
+  const el = document.createElement("div");
+  el.innerHTML = html;
+  return (el.textContent || "").replace(/\s+/g, " ").trim();
+}
+
+function notesRowMatches(i, v) {
+  const texts = v.texts[i], keys = v.keys[i];
+  for (let col = 0; col < v.headers.length - 1; col++) {
+    const f = (notesFilters[col] || "").trim().toLowerCase();
+    if (!f) continue;
+    const text = texts[col].toLowerCase();
+    if (NOTES_SELECT_COLS.indexOf(col) >= 0) {
+      if (text !== f) return false;
+    } else if (NOTES_NUMERIC_COLS.indexOf(col) >= 0) {
+      const m = f.match(/^(>=|<=|>|<|=)?\s*(-?[\d,]*\.?\d+)$/);
+      if (m) {
+        const key = keys[col];
+        if (typeof key !== "number") return false;
+        const target = parseFloat(m[2].replace(/,/g, ""));
+        const op = m[1] || "=";
+        const ok = op === ">" ? key > target : op === "<" ? key < target : op === ">=" ? key >= target
+          : op === "<=" ? key <= target : Math.abs(key - target) < 0.005;
+        if (!ok) return false;
+      } else if (text.indexOf(f) < 0) return false;
+    } else if (text.indexOf(f) < 0) return false;
+  }
+  return true;
+}
+
+// Rebuild only the table body, so typing in a filter box never loses focus.
+function applyNotesFilters() {
+  const v = notesView;
+  if (!v) return;
+  const tbody = document.querySelector("#notesTable tbody");
+  tbody.innerHTML = "";
+  let shown = 0;
+  v.order.forEach(function (i) {
+    if (!notesRowMatches(i, v)) return;
+    shown++;
+    const tr = document.createElement("tr");
+    tr.innerHTML = v.rows[i].map(function (c) { return "<td>" + c + "</td>"; }).join("");
+    tbody.appendChild(tr);
+  });
+  const total = v.rows.length;
+  if (!shown) {
+    tbody.innerHTML = '<tr><td class="empty" colspan="' + v.headers.length + '">' +
+      (total ? "No holdings match these filters." : "Nothing here yet.") + "</td></tr>";
+  }
+  const active = notesFilters.some(function (f) { return (f || "").trim() !== ""; });
+  document.getElementById("notesCount").textContent = total
+    ? "Showing " + shown + " of " + total + " holding" + (total === 1 ? "" : "s")
+    : "";
+  document.getElementById("clearFiltersBtn").hidden = !active;
+}
+
+function buildNotesFilterRow(v) {
+  const thead = document.querySelector("#notesTable thead");
+  const tr = document.createElement("tr");
+  for (let col = 0; col < v.headers.length; col++) {
+    const td = document.createElement("td");
+    td.className = "filter-cell";
+    if (col < v.headers.length - 1) {
+      const cur = notesFilters[col] || "";
+      if (NOTES_SELECT_COLS.indexOf(col) >= 0) {
+        const seen = {};
+        v.texts.forEach(function (t) { if (t[col]) seen[t[col]] = true; });
+        const opts = Object.keys(seen).sort(function (a, b) { return a.localeCompare(b, undefined, { sensitivity: "base" }); });
+        if (cur && opts.map(function (o) { return o.toLowerCase(); }).indexOf(cur.toLowerCase()) < 0) notesFilters[col] = "";
+        const sel = document.createElement("select");
+        sel.className = "row-input";
+        sel.setAttribute("data-filter-col", String(col));
+        sel.setAttribute("aria-label", "Filter " + v.headers[col]);
+        sel.innerHTML = '<option value="">All</option>' + opts.map(function (o) {
+          return '<option value="' + esc(o) + '"' + (o.toLowerCase() === (notesFilters[col] || "").toLowerCase() ? " selected" : "") + ">" + esc(o) + "</option>";
+        }).join("");
+        td.appendChild(sel);
+      } else {
+        const inp = document.createElement("input");
+        inp.type = "text";
+        inp.className = "row-input";
+        inp.value = cur;
+        inp.placeholder = NOTES_NUMERIC_COLS.indexOf(col) >= 0 ? "e.g. >1000" : "Filter";
+        inp.setAttribute("data-filter-col", String(col));
+        inp.setAttribute("aria-label", "Filter " + v.headers[col]);
+        inp.setAttribute("autocapitalize", "off");
+        inp.setAttribute("autocomplete", "off");
+        inp.setAttribute("autocorrect", "off");
+        td.appendChild(inp);
+      }
+    }
+    tr.appendChild(td);
+  }
+  thead.appendChild(tr);
+}
+
 function renderNotesTable(computed) {
   const disp = getDisplayCcy();
   const native = disp === "NATIVE";
@@ -1726,7 +1840,7 @@ function renderNotesTable(computed) {
       return d !== 0 ? d : x - y;
     });
   }
-  fillTable("notesTable", headers, order.map(function (i) { return rows[i]; }));
+  fillTable("notesTable", headers, []);
 
   document.querySelectorAll("#notesTable thead th").forEach(function (th, i) {
     if (i >= headers.length - 1) return;   // the Edit/Delete column is not sortable
@@ -1738,6 +1852,10 @@ function renderNotesTable(computed) {
     th.setAttribute("aria-sort", active ? (sort.dir === 1 ? "ascending" : "descending") : "none");
     th.insertAdjacentHTML("beforeend", '<span class="arrow" aria-hidden="true">' + (active ? (sort.dir === 1 ? "▲" : "▼") : "↕") + "</span>");
   });
+
+  notesView = { headers: headers, rows: rows, keys: sortKeys, order: order, texts: rows.map(function (r) { return r.map(cellText); }) };
+  buildNotesFilterRow(notesView);
+  applyNotesFilters();
 }
 
 
@@ -3043,6 +3161,16 @@ document.addEventListener("DOMContentLoaded", function () {
     if (e.target.files[0]) importBook(e.target.files[0]);
   });
 
+  document.getElementById("notesTable").addEventListener("input", function (e) {
+    const col = e.target.getAttribute && e.target.getAttribute("data-filter-col");
+    if (col == null) return;
+    notesFilters[parseInt(col, 10)] = e.target.value;
+    applyNotesFilters();
+  });
+  document.getElementById("clearFiltersBtn").addEventListener("click", function () {
+    notesFilters = [];
+    renderPortfolio();
+  });
   const sortFromHeader = function (e) {
     const th = e.target.closest ? e.target.closest("th[data-sort-col]") : null;
     if (!th) return false;
