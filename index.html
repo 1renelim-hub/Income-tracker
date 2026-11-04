@@ -1301,7 +1301,8 @@ const EXPORT_KEY = "fcn_tracker_last_export_v1";
 const CHANGE_KEY = "fcn_tracker_last_change_v1";
 const BACKUP_DUE_DAYS = 7;
 const FX_META_KEY = "fcn_tracker_fx_meta_v1";
-const FX_URL = "https://api.frankfurter.dev/v1/latest?base=SGD";
+const FX_URL_V2 = "https://api.frankfurter.dev/v2/rates?base=SGD";   // current API: a flat list, one row per currency
+const FX_URL_V1 = "https://api.frankfurter.dev/v1/latest?base=SGD";   // older API, tried if the current one fails
 
 // SGD per 1 unit of currency. Seeded from mid-market rates on 2026-10-30;
 // edit them in the FX panel — they are assumptions, not a live feed.
@@ -1503,15 +1504,36 @@ function renderFxPanel(computed) {
 // currency per 1 SGD, so each rate is inverted to get SGD per 1 unit. On any failure the saved
 // rates are left exactly as they were.
 function parseFxResponse(data, wanted) {
-  if (!data || typeof data !== "object" || !data.rates || typeof data.date !== "string") throw new Error("bad response");
+  // Current API: [{ date, base, quote, rate }, ...]. Older API: { date, rates: { USD: 0.78, ... } }.
+  let rates = null, date = "";
+  if (Array.isArray(data)) {
+    rates = {};
+    data.forEach(function (r) {
+      if (r && typeof r.quote === "string" && typeof r.rate === "number") {
+        rates[r.quote] = r.rate;
+        if (typeof r.date === "string" && r.date > date) date = r.date;
+      }
+    });
+  } else if (data && typeof data === "object" && data.rates && typeof data.date === "string") {
+    rates = data.rates; date = data.date;
+  }
+  if (!rates || !date) throw new Error("bad response");
   const out = {};
   wanted.forEach(function (ccy) {
     if (ccy === "SGD") return;
-    const perSgd = data.rates[ccy];
+    const perSgd = rates[ccy];
     if (typeof perSgd === "number" && perSgd > 0) out[ccy] = Math.round((1 / perSgd) * 1e6) / 1e6;
   });
   if (!Object.keys(out).length) throw new Error("no usable rates");
-  return { rates: out, date: data.date };
+  return { rates: out, date: date };
+}
+
+function fxFailureReason(err) {
+  const m = err && err.message ? String(err.message) : "";
+  if (err && err.name === "AbortError") return "the request timed out";
+  if (/^HTTP (\d+)/.test(m)) return "the service replied " + m;
+  if (m === "bad response" || m === "no usable rates") return "the service sent an unexpected reply";
+  return "no connection, or the request was blocked";
 }
 
 function refreshFxRates() {
@@ -1521,28 +1543,31 @@ function refreshFxRates() {
   const wanted = {};
   Object.keys(loadFx()).forEach(function (c) { wanted[c] = true; });
   loadNotes().forEach(function (n) { if (n && n.currency) wanted[n.currency] = true; });
+  const wantedList = Object.keys(wanted);
+
+  const getFrom = function (url) {
+    const ctl = (typeof AbortController !== "undefined") ? new AbortController() : null;
+    const timer = ctl ? setTimeout(function () { ctl.abort(); }, 12000) : null;
+    return fetch(url, ctl ? { signal: ctl.signal, cache: "no-store" } : { cache: "no-store" })
+      .then(function (res) { if (!res.ok) throw new Error("HTTP " + res.status); return res.json(); })
+      .then(function (data) { return parseFxResponse(data, wantedList); })
+      .then(function (r) { if (timer) clearTimeout(timer); return r; },
+            function (e) { if (timer) clearTimeout(timer); throw e; });
+  };
 
   btn.disabled = true;
   setStatus("Fetching current rates…", false);
-  const ctl = (typeof AbortController !== "undefined") ? new AbortController() : null;
-  const timer = ctl ? setTimeout(function () { ctl.abort(); }, 12000) : null;
-
-  fetch(FX_URL, ctl ? { signal: ctl.signal, cache: "no-store" } : { cache: "no-store" })
-    .then(function (res) { if (!res.ok) throw new Error("HTTP " + res.status); return res.json(); })
-    .then(function (data) {
-      const parsed = parseFxResponse(data, Object.keys(wanted));
+  getFrom(FX_URL_V2)
+    .catch(function () { return getFrom(FX_URL_V1); })
+    .then(function (parsed) {
       saveFx(Object.assign({}, loadFx(), parsed.rates));
       prefSet(FX_META_KEY, JSON.stringify({ date: parsed.date, fetchedAt: Date.now() }));
       renderPortfolio();
       setStatus("Updated " + Object.keys(parsed.rates).length + " rates (dated " + fmtIso(parsed.date) + ").", false);
+    }, function (err) {
+      setStatus("Couldn’t update rates: " + fxFailureReason(err) + ". Your saved rates are unchanged.", true);
     })
-    .catch(function () {
-      setStatus("Couldn’t reach the rate service. Your saved rates are unchanged.", true);
-    })
-    .then(function () {
-      if (timer) clearTimeout(timer);
-      btn.disabled = false;
-    });
+    .then(function () { btn.disabled = false; });
 }
 
 function renderSummary(computed) {
