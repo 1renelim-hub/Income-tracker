@@ -1879,8 +1879,7 @@ const BANK_KEY = "fcn_tracker_bank_v1";
 const ALL_BANKS = "__ALL__";
 const NO_BANK = "__NONE__";
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const SUM_KEYS = ["notional", "monthly", "thisMonth", "annual", "received", "outstanding", "lifetime", "expected"];
-const BANK_TABLE_KEYS = ["notional", "monthly", "thisMonth", "annual", "received", "outstanding", "lifetime"];
+const SUM_KEYS = ["notional", "monthly", "thisMonth", "annual", "received", "outstanding", "lifetime"];
 let statusFilter = null;
 let bankFilter = null;
 
@@ -1946,8 +1945,8 @@ function incomeFigures(c, today) {
     // holding would otherwise be counted twice.
     notional: active ? (c.note.notional || 0) : 0,
     monthly: active ? c.calc.annualCoupon / 12 : 0,
-    expected: expectedMonthlyCoupon(c.calc, today) || 0,
-    thisMonth: c.calc.rows.reduce(function (s, r) {
+    // Coupons this month: payments dated this calendar month from live holdings only.
+    thisMonth: !active ? 0 : c.calc.rows.reduce(function (s, r) {
       return r.end >= start && r.end < end ? s + r.payment : s;
     }, 0),
     annual: active ? c.calc.annualCoupon : 0,
@@ -2088,7 +2087,7 @@ function renderIncomeSummary(computed) {
     const k = bankKey(c.note);
     return { key: k, label: banks[k], sort: (k === NO_BANK ? "~" : "") + banks[k].toUpperCase() };
   }, disp, today);
-  renderIncomeTable("incomeTable", "Bank", byBank, disp, BANK_TABLE_KEYS, labels);
+  renderIncomeTable("incomeTable", "Bank", byBank, disp, SUM_KEYS, labels);
 
   const byInstrument = aggregateIncome(items, function (c) {
     const kind = c.note.instrument === "BOND" ? "BOND" : c.note.instrument === "FUND" ? "FUND" : "FCN";
@@ -2110,7 +2109,6 @@ function renderIncomeSummary(computed) {
   renderStats([
     { label: "Holdings Shown", value: String(items.length) },
     { label: "Monthly Income — Active (run-rate)", value: money("monthly") },
-    { label: "Expected Monthly Coupon — Active", value: money("expected") },
     { label: "Coupons in " + month, value: money("thisMonth") },
     { label: "Accumulated Income to Date", value: money("received") },
     { label: "Income Outstanding", value: money("outstanding") },
@@ -2118,8 +2116,7 @@ function renderIncomeSummary(computed) {
 
   const notes = [
     "Active = not matured and not knocked out as of today. Run-rates (monthly = annual / 12) and Invested Amount count active holdings only, so they read zero under Inactive.",
-    "Expected Monthly Coupon is the monthly payment for holdings that pay monthly, and the annual coupon ÷ 12 for those paying quarterly, semi-annually or annually. It uses the same calculation and the same active holdings as the Monthly Income run-rate, so the two totals match; the difference is only in how they are explained: the run-rate is annual ÷ 12 for every active holding, while Expected Monthly Coupon is the figure shown per holding in the Holdings table. Neither is cash received in a given month.",
-    "Coupons in " + month + " are actual payments dated this calendar month, so for quarterly or semi-annual payers it can be well above or below the monthly average.",
+    "Coupons in " + month + " are actual payments dated this calendar month from live holdings only, so matured, knocked-out and closed holdings are excluded and it reads zero under Inactive. For quarterly or semi-annual payers it can be well above or below the monthly average.",
     "Invested Amount counts live holdings only, so money rolled over from a knocked-out or matured holding is not counted twice; it reads zero under Inactive.",
     "Accumulated to Date is coupons whose payment date has passed (cash basis — a bond's first coupon includes the accrued interest you paid at purchase).",
   ];
@@ -3141,6 +3138,20 @@ function seedIfEmpty() {
 
 document.addEventListener("DOMContentLoaded", function () {
   seedIfEmpty();
+
+  // Keep "today" current: if the app stays open, or is reopened from the Home Screen after the date has
+  // changed, redraw so the month, active/inactive status and "Coupons in <month>" follow the device clock.
+  let shownDay = formatDate(new Date());
+  const refreshIfNewDay = function () {
+    const day = formatDate(new Date());
+    if (day === shownDay) return;
+    shownDay = day;
+    if (document.getElementById("portfolioView").style.display !== "none") renderPortfolio();
+  };
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) refreshIfNewDay(); });
+  window.addEventListener("pageshow", refreshIfNewDay);
+  window.addEventListener("focus", refreshIfNewDay);
+  setInterval(refreshIfNewDay, 60000);
 
   document.querySelectorAll(".tab").forEach(function (t) {
     t.addEventListener("click", function () { switchTab(t.dataset.tab); });
