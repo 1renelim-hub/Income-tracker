@@ -248,6 +248,32 @@ td.empty {
 .notes-bar .secondary-btn { margin-top: 0; }
 #notesCount { margin: 0; font-size: 13px; }
 
+.note-list {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.note-list[hidden] { display: none; }
+.note-list li { position: relative; margin: 0; padding-left: 18px; }
+.note-list li + li { margin-top: 8px; }
+.note-list li::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 0.62em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #6b6b76;
+}
+.note-list.warn li::before { background: #ff9f0a; }
+
 th.sortable { cursor: pointer; user-select: none; -webkit-user-select: none; white-space: nowrap; }
 th.sortable .arrow { display: inline-block; width: 1em; margin-left: 4px; opacity: 0.35; font-size: 0.8em; }
 th.sortable.sorted .arrow { opacity: 1; }
@@ -565,14 +591,14 @@ button, select, input, label { touch-action: manipulation; }   /* no double-tap-
     <section class="panel">
       <h2>Book Summary</h2>
       <div class="stats" id="summaryStats"></div>
-      <p class="sub flag" id="storageNote"></p>
+      <ul class="note-list warn" id="storageNote" hidden></ul>
       <div class="backup-bar" id="backupBar"></div>
     </section>
 
     <section class="panel">
       <h2>FX Rates to SGD</h2>
       <div class="grid" id="fxRows"></div>
-      <p class="sub" id="fxNote"></p>
+      <ul class="note-list" id="fxNote" hidden></ul>
       <div class="fx-actions">
         <button id="fxRefreshBtn" class="secondary-btn" type="button">Refresh rates</button>
         <p class="sub" id="fxStatus" role="status"></p>
@@ -604,7 +630,7 @@ button, select, input, label { touch-action: manipulation; }   /* no double-tap-
       <div class="table-wrap">
         <table id="instrumentTable"><thead></thead><tbody></tbody></table>
       </div>
-      <p class="sub" id="incomeNote"></p>
+      <ul class="note-list" id="incomeNote" hidden></ul>
     </section>
 
     <section class="panel">
@@ -637,7 +663,7 @@ button, select, input, label { touch-action: manipulation; }   /* no double-tap-
         <input type="text" id="quickEntry" placeholder="e.g. 12 months USD FCN on NVDA UW, META UW - monthly coupon of 9%">
         <button id="parseBtn" class="secondary-btn">Auto-Fill</button>
       </div>
-      <p class="sub" id="parseFeedback"></p>
+      <ul class="note-list" id="parseFeedback" hidden></ul>
     </section>
 
     <section class="panel">
@@ -755,7 +781,11 @@ button, select, input, label { touch-action: manipulation; }   /* no double-tap-
 
     <section class="panel" data-inst="FCN">
       <h2>Underlying Basket</h2>
-      <p class="sub">Enter each underlying's initial fixing price. Strike, KO and KI prices below are derived from the barrier levels (set in the next panel) applied to that fixing — they update as you type.</p>
+      <ul class="note-list">
+        <li>Enter each underlying's initial fixing price.</li>
+        <li>Strike, KO and KI prices below are calculated from that fixing and the barrier levels (set in the next panel), and update as you type.</li>
+        <li>Type a price to override it (shown with a blue border); clear the field to go back to the calculated price.</li>
+      </ul>
       <div class="table-wrap">
         <table id="underlyingTable">
           <thead>
@@ -764,7 +794,6 @@ button, select, input, label { touch-action: manipulation; }   /* no double-tap-
           <tbody id="underlyingRows"></tbody>
         </table>
       </div>
-      <p class="basket-hint">Strike, KO and KI prices are calculated from the initial fixing and the levels above. Type a price to override it (shown with a blue border); clear the field to go back to the calculated price.</p>
       <button id="addUnderlyingBtn" class="secondary-btn">Add Underlying</button>
     </section>
 
@@ -791,7 +820,11 @@ button, select, input, label { touch-action: manipulation; }   /* no double-tap-
           </div>
         </div>
       </div>
-      <p class="sub">Setting a knock-out date terminates the note early: completed coupon periods pay in full and the broken period from the last coupon date to the KO date pays a pro-rated stub coupon.</p>
+      <ul class="note-list">
+        <li>Setting a knock-out date terminates the note early.</li>
+        <li>Completed coupon periods pay in full.</li>
+        <li>The broken period from the last coupon date to the KO date pays a pro-rated stub coupon.</li>
+      </ul>
     </section>
 
     <section class="panel">
@@ -1458,11 +1491,12 @@ function renderFxPanel(computed) {
   });
   let meta = null;
   try { meta = JSON.parse(prefGet(FX_META_KEY, "null")); } catch (e) { meta = null; }
-  document.getElementById("fxNote").textContent = meta && meta.date
-    ? "Rates are SGD per 1 unit. Last refreshed from the European Central Bank reference rates dated " + fmtIso(meta.date) +
-      " (end-of-day, not live trading prices). You can still edit any rate and the SGD totals recalculate."
-    : "Rates are SGD per 1 unit, seeded from mid-market levels on " + fmtIso(FX_ASOF) +
-      ". Tap Refresh rates for current end-of-day rates, or edit any rate and the SGD totals recalculate.";
+  setNoteList("fxNote", meta && meta.date
+    ? ["Rates are SGD per 1 unit.",
+       "Last refreshed from the European Central Bank reference rates dated " + fmtIso(meta.date) + " (end-of-day, not live trading prices).",
+       "You can still edit any rate and the SGD totals recalculate."]
+    : ["Rates are SGD per 1 unit, seeded from mid-market levels on " + fmtIso(FX_ASOF) + ".",
+       "Tap Refresh rates for current end-of-day rates, or edit any rate and the SGD totals recalculate."]);
 }
 
 // Fetch current end-of-day reference rates (needs a connection). The service quotes foreign
@@ -1600,7 +1634,21 @@ function renderSummary(computed) {
       ? "Knock-outs have cut " + tag + " " + formatMoney(total(computed, function (c) { return c.calc.incomeForgone; })) + " of scheduled coupon from the book."
       : "Knock-outs have cut scheduled coupon from the book — pick a display currency to see the total.");
   }
-  document.getElementById("storageNote").textContent = msgs.join(" ");
+  setNoteList("storageNote", msgs);
+}
+
+// Show a list of notes as grey bullet points; the box is hidden when there is nothing to say.
+function setNoteList(id, items) {
+  const ul = document.getElementById(id);
+  if (!ul) return;
+  ul.textContent = "";
+  (items || []).forEach(function (t) {
+    if (!t) return;
+    const li = document.createElement("li");
+    li.textContent = t;
+    ul.appendChild(li);
+  });
+  ul.hidden = !ul.children.length;
 }
 
 // ---- Holdings table sorting: click a header to sort ascending, again for descending, a third time to
@@ -1766,6 +1814,7 @@ function renderNotesTable(computed) {
       : (calc.matured && calc.terminated) ? pill("Terminated", "status-none")
       : calc.matured ? pill("Matured", "status-none")
       : calc.koUnrecorded ? pill("KO Barrier Hit", "status-ki")
+      : !isActive(calc, new Date()) ? pill("Matured", "status-none")
       : calc.kiTriggered ? pill("KI Hit", "status-ki")
       : pill("Live", "status-live");
     const endLabel = isFund
@@ -1785,6 +1834,7 @@ function renderNotesTable(computed) {
       : (calc.matured && calc.terminated) ? "Terminated"
       : calc.matured ? "Matured"
       : calc.koUnrecorded ? "KO Barrier Hit"
+      : !isActive(calc, new Date()) ? "Matured"
       : calc.kiTriggered ? "KI Hit"
       : "Live";
     sortKeys.push([
@@ -1919,10 +1969,25 @@ function bankNameMap(computed) {
   return out;
 }
 
-// Active = still producing income today: not matured and not already knocked out.
+// The date a holding stops paying: the sell date for a fund (open-ended until sold), the knock-out date
+// for a knocked-out note, otherwise the early-termination or maturity date. This is the "Ends" date shown
+// in the Holdings table.
+function holdingEndDate(calc) {
+  if (calc.isFund) return calc.sellDate || null;
+  if (calc.knockedOut && calc.koDate) return calc.koDate;
+  return calc.termDate || calc.maturityDate || null;
+}
+
+// Active (live) = still producing income today: not matured, sold, terminated or knocked out, and its end
+// date has not been reached. A holding is dropped from every live figure and from the active count on its
+// end date.
 function isActive(calc, today) {
   if (calc.matured) return false;
-  if (calc.knockedOut && calc.koDate && calc.koDate <= today) return false;
+  const end = holdingEndDate(calc);
+  if (end) {
+    const t = end instanceof Date ? end : new Date(end);
+    if (!isNaN(t.getTime()) && t <= today) return false;
+  }
   return true;
 }
 
@@ -2115,7 +2180,7 @@ function renderIncomeSummary(computed) {
   ], "incomeStats");
 
   const notes = [
-    "Active = not matured and not knocked out as of today. Run-rates (monthly = annual / 12) and Invested Amount count active holdings only, so they read zero under Inactive.",
+    "Active (live) = not matured, sold, closed or knocked out as of today, and its end date has not been reached; a holding drops out on its end date. Run-rates (monthly = annual / 12) and Invested Amount count active holdings only, so they read zero under Inactive.",
     "Coupons in " + month + " are actual payments dated this calendar month from live holdings only, so matured, knocked-out and closed holdings are excluded and it reads zero under Inactive. For quarterly or semi-annual payers it can be well above or below the monthly average.",
     "Invested Amount counts live holdings only, so money rolled over from a knocked-out or matured holding is not counted twice; it reads zero under Inactive.",
     "Accumulated to Date is coupons whose payment date has passed (cash basis — a bond's first coupon includes the accrued interest you paid at purchase).",
@@ -2129,7 +2194,7 @@ function renderIncomeSummary(computed) {
   if (native && totals.length > 1) notes.push("Native view keeps each currency separate with its own total; pick a currency to roll everything into one number.");
   const missing = byBank.missing;
   if (missing.length) notes.push("No FX rate for " + missing.join(", ") + " — those holdings are excluded from the " + disp + " figures until you set a rate.");
-  document.getElementById("incomeNote").textContent = notes.join(" ");
+  setNoteList("incomeNote", notes);
 }
 
 </script>
@@ -2923,7 +2988,7 @@ function writeForm(note) {
   applyInstrumentUI();
   document.getElementById("resultsPanel").style.display = "none";
   document.getElementById("saveFeedback").textContent = "";
-  document.getElementById("parseFeedback").textContent = "";
+  setNoteList("parseFeedback", []);
 }
 
 function switchTab(name) {
@@ -3279,13 +3344,11 @@ document.addEventListener("DOMContentLoaded", function () {
         p.tickers.forEach(function (t) { addUnderlyingRow(t, 100); });
       }
     }
-    document.getElementById("parseFeedback").textContent = notes.length
-      ? notes.join(" ")
-      : (fund
+    setNoteList("parseFeedback", notes.length ? notes : [(fund
         ? "Auto-filled fund terms. Check the purchase date and dividend per unit, then Calculate and Save to Book."
         : bond
         ? "Auto-filled bond terms. Check the issue date, maturity and nominal, then Calculate and Save to Book."
-        : "Auto-filled note terms and basket. Enter the initial fixing for each underlying, then Calculate and Save to Book.");
+        : "Auto-filled note terms and basket. Enter the initial fixing for each underlying, then Calculate and Save to Book.")]);
   });
 
   ["issueDate", "maturityDate", "terminateDate", "koDate"].forEach(function (id) {
