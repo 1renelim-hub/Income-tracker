@@ -1747,7 +1747,7 @@ function renderNotesTable(computed) {
   const native = disp === "NATIVE";
   const convCol = native ? "Annual Income" : "Annual Income (" + disp + ")";
   const headers = ["Holding", "Bank", "Type", "Ccy", "Invested Amount", "Coupon %", "Freq", "Issue / Buy", "Ends",
-    "Next Coupon", "Monthly Income", "Annual Income", "Realised Income", "Received", convCol,
+    "Next Coupon", "Expected Monthly Coupon", "Annual Income", "Realised Income", "Received", convCol,
     "Yield %", "YTM %", "KO / KI %", "Status", ""];
   const sortKeys = [];
   const rows = computed.map(function (c) {
@@ -1757,6 +1757,11 @@ function renderNotesTable(computed) {
     const ccy = note.currency || "USD";
     const tickers = (isBond || isFund) ? (note.ticker || "") : (note.basket || []).map(function (b) { return b.ticker; }).filter(Boolean).join(", ");
     const annualConv = native ? calc.annualCoupon : convert(calc.annualCoupon, ccy, disp);
+    // Expected coupon per month: the actual payment for monthly payers, otherwise the annual coupon
+    // spread over 12 months. Holdings that are no longer paying (matured, sold, knocked out) show none.
+    const stillPaying = isActive(calc, new Date());
+    const monthlyExpected = stillPaying ? calc.annualCoupon / 12 : null;
+    const freqN = Number(note.frequency) || 12;
     const status = calc.knockedOut ? pill("Knocked Out", "status-ko")
       : (calc.matured && isFund) ? pill("Sold", "status-none")
       : (calc.matured && calc.terminated) ? pill("Terminated", "status-none")
@@ -1794,7 +1799,7 @@ function renderNotesTable(computed) {
       note.issueDate || null,
       sortTime(endDate),
       calc.nextCoupon ? sortTime(calc.nextCoupon.end) : null,
-      calc.monthlyAverage,
+      monthlyExpected,
       calc.annualCoupon,
       calc.totalCoupon,
       calc.incomeReceived,
@@ -1816,7 +1821,9 @@ function renderNotesTable(computed) {
       esc(fmtIso(note.issueDate || "")),
       endLabel,
       calc.nextCoupon ? fmtDate(calc.nextCoupon.end) : "—",
-      formatMoney(calc.monthlyAverage) + (note.frequency === 12 ? "" : "<br><span class='muted'>avg, pays " + esc(String(FREQ_LABEL[note.frequency] || note.frequency).toLowerCase()) + "</span>"),
+      monthlyExpected == null ? "—"
+        : formatMoney(monthlyExpected) + (freqN === 12 ? "<br><span class='muted'>monthly payment</span>"
+          : "<br><span class='muted'>avg of " + formatMoney(calc.annualCoupon / freqN) + " paid " + esc(String(FREQ_LABEL[freqN] || freqN).toLowerCase()) + "</span>"),
       formatMoney(calc.annualCoupon),
       realised,
       formatMoney(calc.incomeReceived) + (isFund
