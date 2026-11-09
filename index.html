@@ -248,6 +248,13 @@ td.empty {
 .notes-bar .secondary-btn { margin-top: 0; }
 #notesCount { margin: 0; font-size: 13px; }
 
+.trend-readout { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin: 4px 0 12px; font-size: 13px; color: var(--muted); }
+.trend-readout .trend-head { color: var(--text); font-weight: 600; margin-right: 4px; }
+.trend-chip { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.trend-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.trend-chart svg { width: 100%; height: auto; display: block; touch-action: manipulation; }
+.trend-chart .empty { padding: 28px 0; text-align: center; color: var(--muted); font-size: 14px; }
+
 .note-list {
   list-style: none;
   margin: 14px 0 0;
@@ -631,6 +638,31 @@ button, select, input, label { touch-action: manipulation; }   /* no double-tap-
         <table id="instrumentTable"><thead></thead><tbody></tbody></table>
       </div>
       <ul class="note-list" id="incomeNote" hidden></ul>
+    </section>
+
+    <section class="panel">
+      <h2>Income Trend by Bank</h2>
+      <div class="filter-bar">
+        <label class="filter-field">
+          <span class="seg-label">Period</span>
+          <select id="trendPeriod" class="filter-select">
+            <option value="M">Monthly</option>
+            <option value="Y">Yearly</option>
+          </select>
+        </label>
+        <label class="filter-field">
+          <span class="seg-label">Holding type</span>
+          <select id="trendType" class="filter-select">
+            <option value="ALL">All holdings</option>
+            <option value="FCN">Fixed Coupon Notes</option>
+            <option value="BOND">Bonds</option>
+            <option value="FUND">Income Funds</option>
+          </select>
+        </label>
+      </div>
+      <div class="trend-readout" id="trendReadout"></div>
+      <div class="trend-chart" id="trendChart"></div>
+      <ul class="note-list" id="trendNote" hidden></ul>
     </section>
 
     <section class="panel">
@@ -1440,6 +1472,7 @@ function renderPortfolio() {
   renderFxPanel(computed);
   renderIncomeSummary(computed);
   renderBackupBar();
+  renderTrend(computed);
 }
 
 function bookCurrencies(computed) {
@@ -2005,9 +2038,10 @@ function holdingEndDate(calc) {
 
 // Active (live) = still producing income today: not matured, sold, terminated or knocked out, and its end
 // date has not been reached. A holding is dropped from every live figure and from the active count on its
-// end date.
+// end date, or as soon as a knock-out date is recorded for it.
 function isActive(calc, today) {
   if (calc.matured) return false;
+  if (calc.knockedOut) return false;   // a recorded knock-out date means the note has been called, even if that date is still ahead
   const end = holdingEndDate(calc);
   if (end) {
     const t = end instanceof Date ? end : new Date(end);
@@ -2159,6 +2193,200 @@ function renderIncomeFilters(computed, banks) {
   fillSelect("bankFilter", bankOpts, getBankFilter(), setBankFilter);
 }
 
+// ---- Income trend chart: coupon / dividend payments by payment date, one line per bank. ----
+const TREND_PERIOD_KEY = "fcn_tracker_trend_period_v1";
+const TREND_TYPE_KEY = "fcn_tracker_trend_type_v1";
+const TREND_COLORS = ["#0a84ff", "#30d158", "#ff9f0a", "#bf5af2", "#ff453a", "#64d2ff", "#ffd60a", "#ac8e68"];
+const TREND_MONTHS_BACK = 5, TREND_MONTHS_AHEAD = 6, TREND_MAX_YEARS = 10;
+let trendComputed = [];
+let trendSelected = null;
+
+function trendKind(note) {
+  return note.instrument === "BOND" ? "BOND" : note.instrument === "FUND" ? "FUND" : "FCN";
+}
+
+// Pure: build the buckets (months or years) and one series per bank. Payments are converted to ccy.
+function buildTrendModel(computed, period, kind, today, ccy) {
+  const banks = bankNameMap(computed);
+  const list = computed.filter(function (c) { return kind === "ALL" || trendKind(c.note) === kind; });
+  const monthly = period === "M";
+  const keyOf = function (d) { return monthly ? d.getFullYear() * 12 + d.getMonth() : d.getFullYear(); };
+  const todayKey = keyOf(today);
+
+  const buckets = [];
+  if (monthly) {
+    for (let i = -TREND_MONTHS_BACK; i <= TREND_MONTHS_AHEAD; i++) {
+      const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
+      buckets.push({ key: keyOf(d), label: MONTHS[d.getMonth()] + " ’" + String(d.getFullYear()).slice(2), full: MONTHS[d.getMonth()] + " " + d.getFullYear() });
+    }
+  } else {
+    let lo = today.getFullYear(), hi = today.getFullYear();
+    list.forEach(function (c) {
+      c.calc.rows.forEach(function (r) {
+        const y = r.end.getFullYear();
+        if (y < lo) lo = y;
+        if (y > hi) hi = y;
+      });
+    });
+    if (hi - lo + 1 > TREND_MAX_YEARS) lo = hi - TREND_MAX_YEARS + 1;
+    for (let y = lo; y <= hi; y++) buckets.push({ key: y, label: String(y), full: String(y) });
+  }
+  const index = {};
+  buckets.forEach(function (b, i) { index[b.key] = i; });
+
+  const seriesMap = {}, missing = {};
+  list.forEach(function (c) {
+    const bk = bankKey(c.note);
+    const ccyN = c.note.currency || "USD";
+    c.calc.rows.forEach(function (r) {
+      const i = index[keyOf(r.end)];
+      if (i == null || !(r.payment > 0)) return;
+      const v = convert(r.payment, ccyN, ccy);
+      if (v == null) { missing[ccyN] = true; return; }
+      if (!seriesMap[bk]) seriesMap[bk] = { key: bk, label: banks[bk] || "Unassigned", values: buckets.map(function () { return 0; }) };
+      seriesMap[bk].values[i] += v;
+    });
+  });
+  const series = Object.keys(seriesMap).map(function (k) { return seriesMap[k]; })
+    .sort(function (a, b) {
+      if (a.key === NO_BANK || b.key === NO_BANK) return a.key === NO_BANK ? 1 : -1;
+      return a.label.localeCompare(b.label, undefined, { sensitivity: "base" });
+    });
+  series.forEach(function (s2, i) { s2.color = TREND_COLORS[i % TREND_COLORS.length]; });
+
+  let max = 0;
+  series.forEach(function (s2) { s2.values.forEach(function (v) { if (v > max) max = v; }); });
+  return { period: period, buckets: buckets, currentIdx: index[todayKey] == null ? -1 : index[todayKey],
+           series: series, max: max, ccy: ccy, missing: Object.keys(missing), count: list.length };
+}
+
+function trendNiceMax(v) {
+  if (v <= 0) return 1;
+  const p = Math.pow(10, Math.floor(Math.log10(v)));
+  const f = v / p;
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p;
+}
+
+function trendCompact(v) {
+  if (v >= 1e6) return (v / 1e6).toFixed(v >= 1e7 ? 0 : 1).replace(/\.0$/, "") + "M";
+  if (v >= 1e3) return (v / 1e3).toFixed(v >= 1e4 ? 0 : 1).replace(/\.0$/, "") + "k";
+  return String(Math.round(v * 100) / 100);
+}
+
+function trendSvg(m, selected) {
+  const W = 720, H = 300, L = 52, R = 18, T = 14, B = 34;
+  const iw = W - L - R, ih = H - T - B, n = m.buckets.length;
+  const top = trendNiceMax(m.max);
+  const x = function (i) { return L + (n === 1 ? iw / 2 : iw * i / (n - 1)); };
+  const y = function (v) { return T + ih - ih * v / top; };
+  const parts = ['<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Income trend by bank">'];
+
+  for (let t = 0; t <= 4; t++) {
+    const v = top * t / 4, yy = y(v);
+    parts.push('<line x1="' + L + '" x2="' + (W - R) + '" y1="' + yy + '" y2="' + yy + '" stroke="rgba(255,255,255,0.08)" />');
+    parts.push('<text x="' + (L - 8) + '" y="' + (yy + 4) + '" text-anchor="end" font-size="11" style="fill:var(--muted)">' + trendCompact(v) + "</text>");
+  }
+  if (m.currentIdx >= 0) {
+    parts.push('<line x1="' + x(m.currentIdx) + '" x2="' + x(m.currentIdx) + '" y1="' + T + '" y2="' + (T + ih) + '" stroke="rgba(255,255,255,0.28)" stroke-dasharray="4 4" />');
+    parts.push('<text x="' + x(m.currentIdx) + '" y="' + (T + 10) + '" text-anchor="middle" font-size="10" style="fill:var(--muted)">' + (m.period === "M" ? "this month" : "this year") + "</text>");
+  }
+  if (selected != null && selected >= 0 && selected < n) {
+    parts.push('<line x1="' + x(selected) + '" x2="' + x(selected) + '" y1="' + T + '" y2="' + (T + ih) + '" stroke="rgba(255,255,255,0.5)" />');
+  }
+  m.buckets.forEach(function (b, i) {
+    parts.push('<text x="' + x(i) + '" y="' + (H - 12) + '" text-anchor="middle" font-size="11" style="fill:var(--muted)">' + esc(b.label) + "</text>");
+  });
+
+  m.series.forEach(function (s2) {
+    const pt = function (i) { return x(i).toFixed(1) + "," + y(s2.values[i]).toFixed(1); };
+    const cut = m.currentIdx;   // up to and including this period is drawn solid; later periods are expected
+    const solid = [], dashed = [];
+    for (let i = 0; i < n; i++) {
+      if (cut >= 0 && i <= cut) solid.push(pt(i));
+      if (cut < 0 || i >= cut) dashed.push(pt(i));
+    }
+    if (solid.length > 1) parts.push('<polyline points="' + solid.join(" ") + '" fill="none" stroke="' + s2.color + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" />');
+    if (dashed.length > 1) parts.push('<polyline points="' + dashed.join(" ") + '" fill="none" stroke="' + s2.color + '" stroke-width="2.5" stroke-dasharray="6 5" stroke-linejoin="round" stroke-linecap="round" />');
+    for (let i = 0; i < n; i++) {
+      const future = m.currentIdx < 0 ? true : i > m.currentIdx;
+      parts.push('<circle cx="' + x(i).toFixed(1) + '" cy="' + y(s2.values[i]).toFixed(1) + '" r="3.8" stroke="' + s2.color + '" stroke-width="2" ' +
+        (future ? 'style="fill:var(--panel)"' : 'fill="' + s2.color + '"') + " />");
+    }
+  });
+
+  const slot = n === 1 ? iw : iw / (n - 1);
+  m.buckets.forEach(function (b, i) {
+    parts.push('<rect data-i="' + i + '" x="' + (x(i) - slot / 2).toFixed(1) + '" y="' + T + '" width="' + slot.toFixed(1) + '" height="' + ih + '" fill="transparent" style="cursor:pointer" />');
+  });
+  parts.push("</svg>");
+  return parts.join("");
+}
+
+function trendReadoutNodes(m, selected) {
+  const frag = document.createDocumentFragment();
+  const head = document.createElement("span");
+  head.className = "trend-head";
+  const b = m.buckets[selected];
+  let total = 0;
+  m.series.forEach(function (s2) { total += s2.values[selected]; });
+  const future = m.currentIdx >= 0 && selected > m.currentIdx;
+  head.textContent = b.full + (future ? " (expected)" : "") + " — total " + m.ccy + " " + formatMoney(total);
+  frag.appendChild(head);
+  m.series.forEach(function (s2) {
+    const chip = document.createElement("span");
+    chip.className = "trend-chip";
+    const dot = document.createElement("span");
+    dot.className = "trend-dot";
+    dot.style.background = s2.color;
+    chip.appendChild(dot);
+    chip.appendChild(document.createTextNode(s2.label + " " + formatMoney(s2.values[selected])));
+    frag.appendChild(chip);
+  });
+  return frag;
+}
+
+function renderTrend(computed) {
+  if (computed) trendComputed = computed;
+  const chart = document.getElementById("trendChart");
+  if (!chart) return;
+  const period = prefGet(TREND_PERIOD_KEY, "M") === "Y" ? "Y" : "M";
+  const kindRaw = prefGet(TREND_TYPE_KEY, "ALL");
+  const kind = ["ALL", "FCN", "BOND", "FUND"].indexOf(kindRaw) >= 0 ? kindRaw : "ALL";
+  document.getElementById("trendPeriod").value = period;
+  document.getElementById("trendType").value = kind;
+
+  const today = new Date();
+  const native = getDisplayCcy() === "NATIVE";
+  const ccy = native ? "SGD" : getDisplayCcy();
+  const m = buildTrendModel(trendComputed, period, kind, today, ccy);
+  const readout = document.getElementById("trendReadout");
+  readout.textContent = "";
+
+  if (!m.series.length) {
+    chart.innerHTML = '<div class="empty">No income to chart for these filters.</div>';
+    setNoteList("trendNote", m.missing.length
+      ? ["No FX rate for " + m.missing.join(", ") + " — those holdings are left out until you set a rate."] : []);
+    return;
+  }
+  let sel = trendSelected;
+  if (sel == null || sel < 0 || sel >= m.buckets.length) sel = m.currentIdx >= 0 ? m.currentIdx : m.buckets.length - 1;
+  trendSelected = sel;
+  chart.innerHTML = trendSvg(m, sel);
+  readout.appendChild(trendReadoutNodes(m, sel));
+
+  const notes = [
+    "Shows coupon and dividend payments by payment date, in " + m.ccy + ", one line per bank. Tap a period to see each bank’s amount for it.",
+    "Solid lines run up to " + (period === "M" ? "this month" : "this year") + "; dashed lines with hollow dots are scheduled, expected payments.",
+    "Ended holdings are included so past income stays visible; a knocked-out note’s coupons stop at its knock-out date.",
+    period === "M" ? "Monthly view covers the last " + TREND_MONTHS_BACK + " months, this month and the next " + TREND_MONTHS_AHEAD + "." : "Yearly view covers every year with payments (up to " + TREND_MAX_YEARS + " years).",
+  ];
+  if (native) notes.push("Native currency view can’t be combined in one chart, so amounts are shown in SGD.");
+  if (m.series.some(function (s2) { return s2.key === NO_BANK; })) notes.push("Holdings with no bank entered are grouped as Unassigned.");
+  if (kind === "ALL" || kind === "FUND") notes.push("Income funds’ past dividends are estimated at the dividend per unit you entered.");
+  if (m.missing.length) notes.push("No FX rate for " + m.missing.join(", ") + " — those holdings are left out until you set a rate.");
+  setNoteList("trendNote", notes);
+}
+
 function renderIncomeSummary(computed) {
   const today = new Date();
   const disp = getDisplayCcy();
@@ -2205,7 +2433,7 @@ function renderIncomeSummary(computed) {
   ], "incomeStats");
 
   const notes = [
-    "Active (live) = not matured, sold, closed or knocked out as of today, and its end date has not been reached; a holding drops out on its end date. Run-rates (monthly = annual / 12) and Invested Amount count active holdings only, so they read zero under Inactive.",
+    "Active (live) = not matured, sold, closed or knocked out as of today, and its end date has not been reached; a holding drops out on its end date, or as soon as a knock-out date is recorded for it (even if that date is still ahead). Run-rates (monthly = annual / 12) and Invested Amount count active holdings only, so they read zero under Inactive.",
     "Coupons in " + month + " are actual payments dated this calendar month from live holdings only, so matured, knocked-out and closed holdings are excluded and it reads zero under Inactive. For quarterly or semi-annual payers it can be well above or below the monthly average.",
     "Invested Amount counts live holdings only, so money rolled over from a knocked-out or matured holding is not counted twice; it reads zero under Inactive.",
     "Accumulated to Date is coupons whose payment date has passed (cash basis — a bond's first coupon includes the accrued interest you paid at purchase).",
@@ -3276,6 +3504,14 @@ document.addEventListener("DOMContentLoaded", function () {
 
   document.getElementById("exportBtn").addEventListener("click", exportBook);
   document.getElementById("fxRefreshBtn").addEventListener("click", refreshFxRates);
+  document.getElementById("trendPeriod").addEventListener("change", function (e) { prefSet(TREND_PERIOD_KEY, e.target.value); trendSelected = null; renderTrend(); });
+  document.getElementById("trendType").addEventListener("change", function (e) { prefSet(TREND_TYPE_KEY, e.target.value); trendSelected = null; renderTrend(); });
+  document.getElementById("trendChart").addEventListener("click", function (e) {
+    const hit = e.target.closest ? e.target.closest("[data-i]") : null;
+    if (!hit) return;
+    trendSelected = parseInt(hit.getAttribute("data-i"), 10);
+    renderTrend();
+  });
   document.getElementById("importBtn").addEventListener("click", function () {
     document.getElementById("importFile").click();
   });
