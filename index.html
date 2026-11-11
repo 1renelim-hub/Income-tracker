@@ -751,6 +751,21 @@ button, select, input, label { touch-action: manipulation; }   /* no double-tap-
           <input type="number" id="dividendPerUnit" min="0" step="0.0001" placeholder="e.g. 0.0496">
         </div>
         <div class="field" data-inst="FUND">
+          <label for="dividendAsOf">Dividend as of (optional)</label>
+          <div class="date-wrap">
+            <input type="text" id="dividendAsOf" class="date-input" placeholder="dd/mm/yyyy" inputmode="numeric" maxlength="10" autocomplete="off">
+            <button type="button" class="cal-btn" data-for="dividendAsOf" aria-label="Choose date from calendar" title="Choose date"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg></button>
+          </div>
+        </div>
+        <div class="field" data-inst="FUND">
+          <label>Check the latest payout</label>
+          <div class="fx-actions">
+            <button type="button" class="secondary-btn" id="dividendRefreshBtn">Refresh from internet</button>
+            <button type="button" class="secondary-btn" id="dividendHistoryBtn">Dividend history ↗</button>
+            <button type="button" class="secondary-btn" id="dividendSearchBtn">Web search ↗</button>
+          </div>
+        </div>
+        <div class="field" data-inst="FUND">
           <label for="investedAmount">Invested amount (optional, for yield)</label>
           <input type="number" id="investedAmount" min="0" step="0.01" placeholder="e.g. 250000">
         </div>
@@ -1684,6 +1699,15 @@ function renderSummary(computed) {
   if (noInv) {
     msgs.push(noInv + " income fund(s) have no invested amount entered, so they add nothing to Invested Amount. Their dividends are still counted in income.");
   }
+  const staleFunds = active.filter(function (c) {
+    if (c.note.instrument !== "FUND" || !(c.note.dividendPerUnit > 0)) return false;
+    const age = fundDividendAgeDays(c.note, today);
+    return age == null || age > FUND_DIVIDEND_STALE_DAYS;
+  });
+  if (staleFunds.length) {
+    const names = staleFunds.slice(0, 3).map(function (c) { return noteLabel(c.note); }).join(", ") + (staleFunds.length > 3 ? " and " + (staleFunds.length - 3) + " more" : "");
+    msgs.push("Dividend per unit may be out of date for " + names + " (not updated in over " + FUND_DIVIDEND_STALE_DAYS + " days, or no as-of date set). Tap Refresh dividend in the Holdings table to look up the latest.");
+  }
   if (missingFx.length) {
     msgs.push("No FX rate set for " + missingFx.join(", ") + " — those holdings are EXCLUDED from every " + disp + " total until you enter a rate below.");
   }
@@ -1918,7 +1942,8 @@ function renderNotesTable(computed) {
       null,
     ]);
     return [
-      "<strong>" + esc(noteLabel(note)) + "</strong><br><span class='muted'>" + esc(tickers) + "</span>",
+      "<strong>" + esc(noteLabel(note)) + "</strong><br><span class='muted'>" + esc(tickers) + "</span>" +
+        (isFund ? "<br><span class='muted'>dividend " + (note.dividendAsOf ? "as of " + esc(fmtIso(note.dividendAsOf)) : "date not set") + "</span>" : ""),
       note.bank && note.bank.trim() ? esc(note.bank.trim()) : "<span class='muted'>Unassigned</span>",
       esc(note.noteType || "FCN"),
       esc(ccy),
@@ -1941,6 +1966,7 @@ function renderNotesTable(computed) {
       calc.ytmPct == null ? "—" : calc.ytmPct.toFixed(2),
       (isBond || isFund) ? "—" : (note.koLevelPct || 0).toFixed(0) + "% / " + (note.kiLevelPct || 0).toFixed(0) + "%",
       status,
+      (isFund ? "<button class='mini-btn' data-div='" + esc(note.id) + "'>Refresh dividend</button> " : "") +
       "<button class='mini-btn' data-edit='" + esc(note.id) + "'>Edit</button> " +
       "<button class='mini-btn danger' data-del='" + esc(note.id) + "'>Delete</button>",
     ];
@@ -2972,6 +2998,191 @@ function fundProblem(note) {
 function fmtUnits(n) { return n.toLocaleString("en-US", { maximumFractionDigits: 3 }); }
 function fmtPerUnit(n) { return String(parseFloat(n.toFixed(6))); }
 
+// ---- Income fund dividends: the per-unit payout is entered by hand (no free, reliable feed covers funds by
+// ISIN), so help keep it current: lookup links, a quick "Update dividend" action, and a staleness reminder.
+const FUND_DIVIDEND_STALE_DAYS = 45;
+
+function fundIsinFromForm() {
+  const t = val("ticker").trim().toUpperCase();
+  return /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/.test(t) ? t : null;
+}
+
+function openFundLookup(kind) {
+  const isin = fundIsinFromForm();
+  if (!isin) { alert("Enter the fund’s ISIN first (for example IE00B8K7V925), then try again."); return; }
+  const url = kind === "history"
+    ? "https://stockevents.app/en/stock/" + isin + ".FUND/dividends"
+    : "https://www.google.com/search?q=" + encodeURIComponent(isin + " distribution history dividend per share");
+  window.open(url, "_blank", "noopener");
+}
+
+function todayIso() { return formatDate(new Date()); }
+
+function fundDividendAgeDays(note, today) {
+  if (!note.dividendAsOf) return null;
+  return Math.floor((today - parseDateInput(note.dividendAsOf)) / 86400000);
+}
+
+// ---- Online dividend lookup, run when you tap Refresh. ----
+// Reads the fund's public dividend history page (DivvyDiary, found from the fund name and ISIN) through a
+// relay service, because Safari does not let a web app read another website directly. Nothing is saved
+// until you confirm the figure it found.
+const DIVIDEND_RELAYS = [
+  function (u) { return "https://corsproxy.io/?url=" + encodeURIComponent(u); },
+  function (u) { return "https://api.allorigins.win/raw?url=" + encodeURIComponent(u); },
+];
+const DIVIDEND_SYMBOL_CCY = { "$": "USD", "US$": "USD", "S$": "SGD", "€": "EUR", "£": "GBP" };
+
+function dividendSlug(name) {
+  return String(name || "").toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+function dividendSourceUrls(note) {
+  const isin = String(note.ticker || "").trim().toUpperCase();
+  const urls = [];
+  const slug = dividendSlug(note.name);
+  if (slug) urls.push("https://divvydiary.com/en/" + slug + "-fund-" + isin);
+  urls.push("https://divvydiary.com/en/" + isin);
+  return urls;
+}
+
+function htmlToText(html) {
+  try {
+    if (typeof DOMParser !== "undefined") {
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      doc.querySelectorAll("script,style").forEach(function (n) { n.remove(); });
+      return doc.body ? (doc.body.textContent || "") : "";
+    }
+  } catch (e) { /* fall back to a plain tag strip */ }
+  return html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ");
+}
+
+// Pure: find the most recent payout (ex-date up to today) in a dividend history page.
+function parseDividendPage(html, isin, today) {
+  if (!html || html.toUpperCase().indexOf(isin) < 0) throw new Error("wrong page");
+  const text = htmlToText(html);
+  const re = /(\d{2})\/(\d{2})\/(\d{4})\s*(\d{2})\/(\d{2})\/(\d{4})\s*(S\$|US\$|[$€£])\s*(\d+(?:\.\d+)?)/g;
+  let best = null, m;
+  while ((m = re.exec(text)) !== null) {
+    const exDate = m[3] + "-" + m[2] + "-" + m[1];
+    const payDate = m[6] + "-" + m[5] + "-" + m[4];
+    const amount = parseFloat(m[8]);
+    if (!(amount > 0 && amount < 1000) || exDate > today) continue;
+    if (!best || exDate > best.exDate) {
+      best = { exDate: exDate, payDate: payDate, amount: amount, ccy: DIVIDEND_SYMBOL_CCY[m[7]] || m[7],
+               asOf: payDate <= today ? payDate : exDate };
+    }
+  }
+  if (!best) throw new Error("no payouts found");
+  return best;
+}
+
+function fetchPageText(url) {
+  const ctl = (typeof AbortController !== "undefined") ? new AbortController() : null;
+  const timer = ctl ? setTimeout(function () { ctl.abort(); }, 9000) : null;
+  return fetch(url, ctl ? { signal: ctl.signal, cache: "no-store" } : { cache: "no-store" })
+    .then(function (res) { if (!res.ok) throw new Error("HTTP " + res.status); return res.text(); })
+    .then(function (t) { if (timer) clearTimeout(timer); return t; },
+          function (e) { if (timer) clearTimeout(timer); throw e; });
+}
+
+function lookupFundDividend(note) {
+  const isin = String(note.ticker || "").trim().toUpperCase();
+  if (!/^[A-Z]{2}[A-Z0-9]{9}[0-9]$/.test(isin)) return Promise.reject(new Error("no isin"));
+  const targets = [];
+  dividendSourceUrls(note).forEach(function (u) { DIVIDEND_RELAYS.forEach(function (r) { targets.push(r(u)); }); });
+  let lastErr = null;
+  const tryNext = function (i) {
+    if (i >= targets.length) return Promise.reject(lastErr || new Error("failed"));
+    return fetchPageText(targets[i])
+      .then(function (html) { return parseDividendPage(html, isin, todayIso()); })
+      .catch(function (e) { lastErr = e; return tryNext(i + 1); });
+  };
+  return tryNext(0);
+}
+
+function dividendFailureReason(err) {
+  const m = err && err.message ? String(err.message) : "";
+  if (m === "no isin") return "this fund has no valid ISIN entered";
+  if (err && err.name === "AbortError") return "the request timed out";
+  if (/^HTTP (\d+)/.test(m)) return "the lookup service replied " + m;
+  if (m === "wrong page" || m === "no payouts found") return "the page did not list this fund’s payouts";
+  return "no connection, or the lookup was blocked";
+}
+
+function describeDividendResult(note, r, action) {
+  const cur = note.dividendPerUnit || 0;
+  const ccy = note.currency || "USD";
+  let msg = "Latest payout found for " + noteLabel(note) + ":\n" + r.ccy + " " + fmtPerUnit(r.amount) + " per unit, paid " +
+    fmtIso(r.payDate) + " (source: DivvyDiary).\n\nCurrently " + (cur ? fmtPerUnit(cur) : "not set") + ".";
+  if (r.ccy !== ccy) msg += "\n\nWARNING: the page quotes " + r.ccy + " but this fund is set to " + ccy + " — check before using it.";
+  if (Math.floor((new Date() - parseDateInput(r.exDate)) / 86400000) > 70) msg += "\n\nNote: this is the newest payout listed, and it is over 70 days old.";
+  if (cur > 0 && Math.abs(r.amount - cur) / cur > 0.5) msg += "\n\nThis changes the dividend by more than 50%.";
+  return msg + "\n\n" + action;
+}
+
+function saveFundDividend(id, value, asOf) {
+  const notes = loadNotes();
+  const note = notes.find(function (n) { return n.id === id; });
+  if (!note) return;
+  note.dividendPerUnit = value;
+  note.dividendAsOf = asOf;
+  saveNotes(notes);
+  renderPortfolio();
+}
+
+// Typing the figure by hand: used when the online lookup fails or you decline its result.
+function manualFundDividend(id) {
+  const note = loadNotes().find(function (n) { return n.id === id; });
+  if (!note) return;
+  const cur = note.dividendPerUnit || 0;
+  const answer = prompt("Latest dividend per unit (per payment) for " + noteLabel(note) + " — " + (note.currency || "USD") +
+    ".\nCurrently " + (cur ? fmtPerUnit(cur) : "not set") + ".", cur ? fmtPerUnit(cur) : "");
+  if (answer == null) return;
+  const v = parseFloat(String(answer).replace(/,/g, ""));
+  if (!(v > 0)) { alert("Enter a number greater than 0, for example 0.0496."); return; }
+  if (cur > 0 && Math.abs(v - cur) / cur > 0.5 &&
+      !confirm("That changes the dividend by more than 50% (" + fmtPerUnit(cur) + " to " + fmtPerUnit(v) + "). Save it?")) return;
+  saveFundDividend(id, v, todayIso());
+}
+
+// Refresh dividend (Holdings table): look it up online, show what was found, save only if you agree.
+function updateFundDividend(id, btn) {
+  const note = loadNotes().find(function (n) { return n.id === id; });
+  if (!note) return;
+  const label = btn ? btn.textContent : "";
+  if (btn) { btn.disabled = true; btn.textContent = "Looking up…"; }
+  const done = function () { if (btn) { btn.disabled = false; btn.textContent = label; } };
+  lookupFundDividend(note).then(function (r) {
+    done();
+    if (confirm(describeDividendResult(note, r, "Save it?"))) saveFundDividend(id, r.amount, r.asOf);
+    else if (confirm("Enter a different figure by hand instead?")) manualFundDividend(id);
+  }, function (err) {
+    done();
+    if (confirm("Couldn’t look up the latest dividend online (" + dividendFailureReason(err) + ").\n\nEnter it by hand instead?")) manualFundDividend(id);
+  });
+}
+
+// Refresh from the fund editor: fills in the form fields (you still tap Save).
+function refreshDividendInEditor() {
+  const btn = document.getElementById("dividendRefreshBtn");
+  const note = readForm();
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = "Looking up…";
+  const done = function () { btn.disabled = false; btn.textContent = label; };
+  lookupFundDividend(note).then(function (r) {
+    done();
+    if (!confirm(describeDividendResult(note, r, "Fill it into the form?"))) return;
+    setVal("dividendPerUnit", r.amount);
+    setDate("dividendAsOf", r.asOf);
+    const el = document.getElementById("dividendPerUnit");
+    if (el && el.dispatchEvent && typeof Event !== "undefined") el.dispatchEvent(new Event("input", { bubbles: true }));
+  }, function (err) {
+    done();
+    alert("Couldn’t look up the latest dividend online (" + dividendFailureReason(err) + "). Use the history link, or type it in.");
+  });
+}
+
 function renderFundResults() {
   const note = readForm();
   const problem = fundProblem(note);
@@ -3049,7 +3260,7 @@ function setDate(id, iso) { setVal(id, iso ? fmtIso(iso) : ""); }
 const DATE_FIELDS = {
   FCN:  [["issueDate", "issue date"], ["koDate", "knock-out date"]],
   BOND: [["issueDate", "issue date"], ["maturityDate", "maturity date"], ["terminateDate", "early termination date"]],
-  FUND: [["issueDate", "purchase date"], ["terminateDate", "sell date"]],
+  FUND: [["issueDate", "purchase date"], ["terminateDate", "sell date"], ["dividendAsOf", "dividend as-of date"]],
 };
 
 // A message when a visible date field holds text that is not a real dd/mm/yyyy date.
@@ -3159,6 +3370,7 @@ function readForm() {
     koDate: readDate("koDate"),
     units: num("units"),
     dividendPerUnit: num("dividendPerUnit"),
+    dividendAsOf: readDate("dividendAsOf"),
     investedAmount: num("investedAmount"),
     basket: readBasket(),
   };
@@ -3214,6 +3426,7 @@ function writeForm(note) {
   setVal("issuer", note.issuer || "");
   setVal("units", note.units ? note.units : "");
   setVal("dividendPerUnit", note.dividendPerUnit ? note.dividendPerUnit : "");
+  setDate("dividendAsOf", note.dividendAsOf);
   // Older saved funds kept a NAV per unit instead of an invested amount.
   const invested = note.investedAmount != null ? note.investedAmount : (note.units || 0) * (note.navPerUnit || 0);
   setVal("investedAmount", invested ? invested : "");
@@ -3504,6 +3717,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
   document.getElementById("exportBtn").addEventListener("click", exportBook);
   document.getElementById("fxRefreshBtn").addEventListener("click", refreshFxRates);
+  document.getElementById("dividendRefreshBtn").addEventListener("click", refreshDividendInEditor);
+  document.getElementById("dividendHistoryBtn").addEventListener("click", function () { openFundLookup("history"); });
+  document.getElementById("dividendSearchBtn").addEventListener("click", function () { openFundLookup("search"); });
   document.getElementById("trendPeriod").addEventListener("change", function (e) { prefSet(TREND_PERIOD_KEY, e.target.value); trendSelected = null; renderTrend(); });
   document.getElementById("trendType").addEventListener("change", function (e) { prefSet(TREND_TYPE_KEY, e.target.value); trendSelected = null; renderTrend(); });
   document.getElementById("trendChart").addEventListener("click", function (e) {
@@ -3542,7 +3758,10 @@ document.addEventListener("DOMContentLoaded", function () {
     if (sortFromHeader(e)) return;
     const editId = e.target.getAttribute("data-edit");
     const delId = e.target.getAttribute("data-del");
-    if (editId) {
+    const divId = e.target.getAttribute("data-div");
+    if (divId) {
+      updateFundDividend(divId, e.target);
+    } else if (editId) {
       const note = loadNotes().find(function (n) { return n.id === editId; });
       if (note) { currentEditId = note.id; writeForm(note); switchTab("editor"); }
     } else if (delId) {
