@@ -789,6 +789,13 @@ button, select, input, label { touch-action: manipulation; }   /* no double-tap-
             <button type="button" class="cal-btn" data-for="issueDate" aria-label="Choose date from calendar" title="Choose date"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg></button>
           </div>
         </div>
+        <div class="field" data-inst="FCN">
+          <label for="settlementDate">Settlement date (optional)</label>
+          <div class="date-wrap">
+            <input type="text" id="settlementDate" class="date-input" placeholder="dd/mm/yyyy" inputmode="numeric" maxlength="10" autocomplete="off">
+            <button type="button" class="cal-btn" data-for="settlementDate" aria-label="Choose date from calendar" title="Choose date"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg></button>
+          </div>
+        </div>
         <div class="field" data-inst="BOND">
           <label for="maturityDate">Maturity date</label>
           <div class="date-wrap">
@@ -1735,7 +1742,7 @@ function setNoteList(id, items) {
 
 // ---- Holdings table sorting: click a header to sort ascending, again for descending, a third time to
 // return to the order the holdings were added in. The choice is remembered on this device.
-const SORT_KEY = "fcn_tracker_sort_v2";
+const SORT_KEY = "fcn_tracker_sort_v3";
 let notesSort = null;
 
 function getNotesSort() {
@@ -1771,8 +1778,8 @@ function compareSortKeys(a, b) {
 // ---- Holdings table filters: one box per column under the headers. Text boxes match anywhere in the
 // column's text; number columns also accept >, <, >=, <= or = (for example >1000). Dropdown columns
 // match exactly. Filters apply on top of the current sort and reset when the app is reopened.
-const NOTES_SELECT_COLS = [1, 2, 3, 6, 18];            // Bank, Type, Ccy, Freq, Status
-const NOTES_NUMERIC_COLS = [4, 5, 10, 11, 12, 13, 14, 15, 16];
+const NOTES_SELECT_COLS = [1, 2, 3, 6, 19];            // Bank, Type, Ccy, Freq, Status
+const NOTES_NUMERIC_COLS = [4, 5, 11, 12, 13, 14, 15, 16, 17];
 let notesFilters = [];
 let notesView = null;   // { headers, rows, keys, texts, order } for the table currently shown
 
@@ -1876,7 +1883,7 @@ function renderNotesTable(computed) {
   const disp = getDisplayCcy();
   const native = disp === "NATIVE";
   const convCol = native ? "Annual Income" : "Annual Income (" + disp + ")";
-  const headers = ["Holding", "Bank", "Type", "Ccy", "Invested Amount", "Coupon %", "Freq", "Issue / Buy", "Ends",
+  const headers = ["Holding", "Bank", "Type", "Ccy", "Invested Amount", "Coupon %", "Freq", "Issue / Buy", "Settlement", "Ends",
     "Next Coupon", "Expected Monthly Coupon", "Annual Income", "Realised Income", "Received", convCol,
     "Yield %", "YTM %", "KO / KI %", "Status", ""];
   const sortKeys = [];
@@ -1928,6 +1935,7 @@ function renderNotesTable(computed) {
       isFund ? null : (note.couponRate || 0),
       Number(note.frequency) || 0,
       note.issueDate || null,
+      (isBond || isFund) ? null : (note.settlementDate || null),
       sortTime(endDate),
       calc.nextCoupon ? sortTime(calc.nextCoupon.end) : null,
       monthlyExpected,
@@ -1951,6 +1959,7 @@ function renderNotesTable(computed) {
       isFund ? "—" : (note.couponRate || 0).toFixed(2),
       esc(FREQ_LABEL[note.frequency] || note.frequency),
       esc(fmtIso(note.issueDate || "")),
+      (isBond || isFund || !note.settlementDate) ? "—" : esc(fmtIso(note.settlementDate)),
       endLabel,
       calc.nextCoupon ? fmtDate(calc.nextCoupon.end) : "—",
       monthlyExpected == null ? "—"
@@ -2645,7 +2654,7 @@ function parseNoteDescription(text) {
 const MONDAY_FIRST = true;
 const DP_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const DP_DOW = MONDAY_FIRST ? ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"] : ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
-const DP_FIELDS = ["issueDate", "maturityDate", "terminateDate", "koDate"];
+const DP_FIELDS = ["issueDate", "maturityDate", "terminateDate", "koDate", "settlementDate", "dividendAsOf"];
 
 let dpOpenId = null;   // id of the date box the calendar is open for
 let dpYear = 0;        // month being viewed
@@ -3258,7 +3267,7 @@ function readDate(id) { return parseDmy(val(id)) || ""; }
 function setDate(id, iso) { setVal(id, iso ? fmtIso(iso) : ""); }
 
 const DATE_FIELDS = {
-  FCN:  [["issueDate", "issue date"], ["koDate", "knock-out date"]],
+  FCN:  [["issueDate", "issue date"], ["settlementDate", "settlement date"], ["koDate", "knock-out date"]],
   BOND: [["issueDate", "issue date"], ["maturityDate", "maturity date"], ["terminateDate", "early termination date"]],
   FUND: [["issueDate", "purchase date"], ["terminateDate", "sell date"], ["dividendAsOf", "dividend as-of date"]],
 };
@@ -3368,6 +3377,7 @@ function readForm() {
     koLevelPct: num("koLevel"),
     kiLevelPct: num("kiLevel"),
     koDate: readDate("koDate"),
+    settlementDate: readDate("settlementDate"),
     units: num("units"),
     dividendPerUnit: num("dividendPerUnit"),
     dividendAsOf: readDate("dividendAsOf"),
@@ -3447,6 +3457,7 @@ function writeForm(note) {
   setVal("koLevel", note.koLevelPct == null ? 105 : note.koLevelPct);
   setVal("kiLevel", note.kiLevelPct == null ? 70 : note.kiLevelPct);
   setDate("koDate", note.koDate);
+  setDate("settlementDate", note.settlementDate);
   document.getElementById("underlyingRows").innerHTML = "";
   (note.basket && note.basket.length ? note.basket : [{ ticker: "", initialFixing: 100 }])
     .forEach(function (b) { addUnderlyingRow(b.ticker, b.initialFixing, b); });
