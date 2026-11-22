@@ -248,6 +248,8 @@ td.empty {
 .notes-bar .secondary-btn { margin-top: 0; }
 #notesCount { margin: 0; font-size: 13px; }
 
+.hist-box { margin: 16px 0 6px; }
+.hist-box textarea { width: 100%; min-height: 110px; margin-top: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .trend-readout { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin: 4px 0 12px; font-size: 13px; color: var(--muted); }
 .trend-readout .trend-head { color: var(--text); font-weight: 600; margin-right: 4px; }
 .trend-chip { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
@@ -843,7 +845,7 @@ button, select, input, label { touch-action: manipulation; }   /* no double-tap-
       <div class="table-wrap">
         <table id="underlyingTable">
           <thead>
-            <tr><th>Ticker</th><th>Initial Fixing Price</th><th>Strike Price</th><th>KO Price</th><th>KI Price</th><th></th></tr>
+            <tr><th>Ticker</th><th>Initial Fixing Price</th><th>Strike Price</th><th>KO Price</th><th>KI Price</th><th>Volatility % (annual)</th><th></th></tr>
           </thead>
           <tbody id="underlyingRows"></tbody>
         </table>
@@ -879,6 +881,73 @@ button, select, input, label { touch-action: manipulation; }   /* no double-tap-
         <li>Completed coupon periods pay in full.</li>
         <li>The broken period from the last coupon date to the KO date pays a pro-rated stub coupon.</li>
       </ul>
+    </section>
+
+    <section class="panel" data-inst="FCN">
+      <h2>Fair Coupon (model estimate)</h2>
+      <div class="grid">
+        <div class="field">
+          <label for="fcCorr">Average correlation between underlyings (%)</label>
+          <input type="number" id="fcCorr" min="-99" max="99" step="1" inputmode="decimal" placeholder="e.g. 50">
+        </div>
+        <div class="field">
+          <label for="fcRate">Risk-free rate (% a year)</label>
+          <input type="number" id="fcRate" step="0.01" inputmode="decimal" placeholder="e.g. 4.0">
+        </div>
+        <div class="field">
+          <label for="fcDiv">Dividend yield (% a year, optional)</label>
+          <input type="number" id="fcDiv" min="0" step="0.1" inputmode="decimal" placeholder="0">
+        </div>
+        <div class="field">
+          <label for="fcKiObs">KI observation</label>
+          <select id="fcKiObs">
+            <option value="D">Daily</option>
+            <option value="M">At maturity only</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="fcNonCall">KO starts after (coupon periods)</label>
+          <input type="number" id="fcNonCall" min="0" step="1" value="0">
+        </div>
+        <div class="field">
+          <label for="fcMargin">Issuer margin to allow for (% of par, optional)</label>
+          <input type="number" id="fcMargin" min="0" step="0.1" inputmode="decimal" placeholder="0">
+        </div>
+      </div>
+      <div class="hist-box">
+        <p class="seg-label">Volatility</p>
+        <ul class="note-list">
+          <li>Type each underlying's volatility in the basket table, or work it out here.</li>
+          <li>Historical: paste closing prices for one underlying, and its volatility is filled in for you. Paste the same number of prices for each underlying and the average correlation is filled in too.</li>
+          <li>Implied: finds the volatility the bank's coupon is priced on, using only the term sheet, so you can compare it with the historical figures.</li>
+        </ul>
+        <div class="grid">
+          <div class="field">
+            <label for="histTicker">Underlying</label>
+            <select id="histTicker"></select>
+          </div>
+          <div class="field">
+            <label for="histFreq">Price frequency</label>
+            <select id="histFreq">
+              <option value="252">Daily</option>
+              <option value="52">Weekly</option>
+              <option value="12">Monthly</option>
+            </select>
+          </div>
+        </div>
+        <textarea id="histPrices" class="row-input" rows="5" placeholder="Paste closing prices, one per line (at least 21)"></textarea>
+        <div class="fx-actions">
+          <button type="button" class="secondary-btn" id="histBtn">Calculate historical volatility</button>
+          <button type="button" class="secondary-btn" id="impliedBtn">Implied volatility from the bank’s coupon</button>
+        </div>
+        <div class="trend-readout" id="volResult"></div>
+        <ul class="note-list" id="volNote" hidden></ul>
+      </div>
+      <div class="btn-row">
+        <button id="fairBtn" class="secondary-btn" type="button">Calculate fair coupon</button>
+      </div>
+      <div class="trend-readout" id="fairResult"></div>
+      <ul class="note-list" id="fairNote" hidden></ul>
     </section>
 
     <section class="panel">
@@ -991,6 +1060,248 @@ function maskDateValue(v) {
   if (d.length > 2) out += "/" + d.slice(2, 4);
   if (d.length > 4) out += "/" + d.slice(4);
   return out;
+}
+
+// ---- Fair coupon (model estimate) for FCNs -------------------------------------------------------------
+// Monte Carlo pricing of the note on a worst-of basket: correlated lognormal paths (about 252 steps a year),
+// coupons paid on every coupon date until the note is knocked out (KO is observed on coupon dates) or matures,
+// and at maturity the investor takes a loss on the worst performer if the KI barrier was hit and it finished
+// below the strike. The note's value is linear in the coupon, value = c x A + R, where A is the expected
+// present value of 1% a year of coupons and R the expected present value of the redemption, so the fair
+// coupon (the one that values the note at its issue price) is c = (issue price - R) / A.
+function fairMulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function fairCholesky(n, rho) {
+  const L = [];
+  for (let i = 0; i < n; i++) {
+    L.push([]);
+    for (let j = 0; j <= i; j++) {
+      let sum = i === j ? 1 : rho;
+      for (let k = 0; k < j; k++) sum -= L[i][k] * L[j][k];
+      if (i === j) { if (sum <= 1e-12) return null; L[i][j] = Math.sqrt(sum); }
+      else L[i][j] = sum / L[j][j];
+    }
+    for (let j = i + 1; j < n; j++) L[i][j] = 0;
+  }
+  return L;
+}
+
+// Pure. p: { vols[], corr, rate, div, freq, periods, strike, ko, ki, kiDaily, nonCall, issuePrice, redemption, paths, seed }
+// All rates and levels are decimals (0.04 = 4%, 1.05 = 105% of initial).
+function fairCouponModel(p) {
+  const n = p.vols.length, f = p.freq, N = p.periods;
+  const sp = Math.max(1, Math.round(252 / f));
+  const M = N * sp, dt = 1 / (f * sp), sdt = Math.sqrt(dt);
+  const L = fairCholesky(n, p.corr);
+  if (!L) throw new Error("correlation not valid");
+  const drift = [], vol = [];
+  for (let i = 0; i < n; i++) {
+    drift.push((p.rate - p.div - 0.5 * p.vols[i] * p.vols[i]) * dt);
+    vol.push(p.vols[i] * sdt);
+  }
+  const disc = [0];
+  for (let k = 1; k <= N; k++) disc.push(Math.exp(-p.rate * k / f));
+  const annuity = [0];                                     // PV of 1 per year of coupon, paid on dates 1..k
+  for (let k = 1; k <= N; k++) annuity.push(annuity[k - 1] + disc[k] / f);
+
+  const rand = fairMulberry32(p.seed || 12345);
+  let spare = null;
+  const gauss = function () {
+    if (spare !== null) { const v = spare; spare = null; return v; }
+    let u = 0;
+    while (u === 0) u = rand();
+    const w = rand(), r = Math.sqrt(-2 * Math.log(u));
+    spare = r * Math.sin(2 * Math.PI * w);
+    return r * Math.cos(2 * Math.PI * w);
+  };
+
+  const pairs = Math.max(1, Math.floor(p.paths / 2));
+  const z = new Float64Array(M * n);
+  const logS = new Float64Array(n);
+  const out = { A: 0, R: 0 };
+  let sumA = 0, sumR = 0, sumAA = 0, sumRR = 0, sumAR = 0;
+  let koCount = 0, matCount = 0, kiCount = 0, lossCount = 0, lossFracSum = 0, lifeSum = 0;
+
+  const run = function (sign) {
+    for (let i = 0; i < n; i++) logS[i] = 0;
+    let kiHit = false, tau = N, knocked = false, worst = 1;
+    for (let s2 = 1; s2 <= M; s2++) {
+      const base = (s2 - 1) * n;
+      let w = Infinity;
+      for (let i = 0; i < n; i++) {
+        let x = 0;
+        for (let j = 0; j <= i; j++) x += L[i][j] * z[base + j];
+        logS[i] += drift[i] + vol[i] * sign * x;
+        const perf = Math.exp(logS[i]);
+        if (perf < w) w = perf;
+      }
+      worst = w;
+      if (p.kiDaily && w < p.ki) kiHit = true;
+      if (s2 % sp === 0) {
+        const k = s2 / sp;
+        if (k > p.nonCall && k < N && w >= p.ko) { tau = k; knocked = true; break; }
+      }
+    }
+    lifeSum += tau / f;
+    out.A = annuity[tau];
+    if (knocked) { koCount++; out.R = p.redemption * disc[tau]; return; }
+    matCount++;
+    const event = p.kiDaily ? kiHit : worst < p.ki;
+    if (event) kiCount++;
+    let frac = 1;
+    if (event && worst < p.strike) { frac = worst / p.strike; lossCount++; lossFracSum += frac; }
+    out.R = p.redemption * frac * disc[N];
+  };
+
+  for (let q = 0; q < pairs; q++) {
+    for (let idx = 0; idx < M * n; idx++) z[idx] = gauss();
+    run(1);
+    const a1 = out.A, r1 = out.R;
+    run(-1);
+    const a = (a1 + out.A) / 2, r = (r1 + out.R) / 2;
+    sumA += a; sumR += r; sumAA += a * a; sumRR += r * r; sumAR += a * r;
+  }
+  const A = sumA / pairs, R = sumR / pairs;
+  const fair = (p.issuePrice - R) / A;
+  const varA = Math.max(0, sumAA / pairs - A * A), varR = Math.max(0, sumRR / pairs - R * R);
+  const cov = sumAR / pairs - A * R;
+  const varE = Math.max(0, varR + fair * fair * varA + 2 * fair * cov);
+  const paths = pairs * 2;
+  return {
+    fairPct: fair * 100, A: A, R: R,
+    sePct: (Math.sqrt(varE / pairs) / A) * 100,
+    pKO: koCount / paths, pKI: kiCount / paths, pLoss: lossCount / paths,
+    avgLossRedemption: lossCount ? lossFracSum / lossCount : null,
+    lifeYears: lifeSum / paths, paths: paths,
+  };
+}
+
+// ---- Volatility helpers --------------------------------------------------------------------------------
+// Implied volatility: the single volatility (the same for every underlying) at which the note, paying the
+// bank's coupon, is worth the issue price less an allowed issuer margin. Found by regula falsi on the model.
+function solveImpliedVol(params, couponPct, marginPct) {
+  const c = couponPct / 100, target = params.issuePrice - (marginPct || 0) / 100;
+  const sp = Math.max(1, Math.round(252 / params.freq));
+  const paths = params.periods * sp * params.vols.length > 4000 ? 6000 : 8000;
+  const g = function (sig) {
+    const r = fairCouponModel(Object.assign({}, params, { vols: params.vols.map(function () { return sig; }), paths: paths }));
+    return c * r.A + r.R - target;
+  };
+  let lo = 0.05, hi = 1.5, gl = g(lo), gh = g(hi);
+  if (gl < 0) return { bound: "low" };      // even at 5% volatility the coupon is worth less than the target
+  if (gh > 0) return { bound: "high" };     // even at 150% volatility the coupon is worth more than the target
+  let side = 0, sig = lo;
+  for (let it = 0; it < 14; it++) {
+    sig = (lo * gh - hi * gl) / (gh - gl);
+    const gs = g(sig);
+    if (Math.abs(gs) < 0.0004 || hi - lo < 0.002) break;
+    if (gs > 0) { lo = sig; gl = gs; if (side === 1) gh /= 2; side = 1; }
+    else { hi = sig; gh = gs; if (side === -1) gl /= 2; side = -1; }
+  }
+  return { volPct: sig * 100 };
+}
+
+// Historical volatility from pasted closing prices (one per line; a leading date on a line is ignored).
+// perYear: 252 for daily prices, 52 weekly, 12 monthly. The order of the prices does not matter.
+function histVolFromPrices(text, perYear) {
+  const prices = [];
+  String(text).split(/\r?\n/).forEach(function (line) {
+    const cleaned = line.replace(/\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/\d{2,4}/g, " ");
+    const nums = cleaned.match(/-?\d{1,3}(?:,\d{3})+(?:\.\d+)?|-?\d+(?:\.\d+)?/g);
+    if (nums) {
+      const v = parseFloat(nums[nums.length - 1].replace(/,/g, ""));
+      if (v > 0) prices.push(v);
+    }
+  });
+  if (prices.length < 21) throw new Error("Paste at least 21 prices (about a month of daily closes); more is better.");
+  const rets = [];
+  for (let i = 1; i < prices.length; i++) rets.push(Math.log(prices[i] / prices[i - 1]));
+  const mean = rets.reduce(function (a, b) { return a + b; }, 0) / rets.length;
+  const variance = rets.reduce(function (a, b) { return a + (b - mean) * (b - mean); }, 0) / (rets.length - 1);
+  return { volPct: Math.sqrt(variance * perYear) * 100, n: rets.length, rets: rets };
+}
+
+// Average pairwise correlation of equal-length return series (aligned by position), or null.
+function histCorrelation(seriesList) {
+  if (seriesList.length < 2) return null;
+  const len = seriesList[0].length;
+  for (let i = 1; i < seriesList.length; i++) if (seriesList[i].length !== len) return null;
+  const corr = function (a, b) {
+    const ma = a.reduce(function (x, y) { return x + y; }, 0) / len, mb = b.reduce(function (x, y) { return x + y; }, 0) / len;
+    let sab = 0, saa = 0, sbb = 0;
+    for (let i = 0; i < len; i++) { sab += (a[i] - ma) * (b[i] - mb); saa += (a[i] - ma) * (a[i] - ma); sbb += (b[i] - mb) * (b[i] - mb); }
+    return sab / Math.sqrt(saa * sbb);
+  };
+  let sum = 0, count = 0;
+  for (let i = 0; i < seriesList.length; i++) for (let j = i + 1; j < seriesList.length; j++) { sum += corr(seriesList[i], seriesList[j]); count++; }
+  return { avg: sum / count, n: len };
+}
+
+// Turn a saved FCN into model inputs, or say what is missing.
+function buildFairParams(note, opts) {
+  const skipVols = !!(opts && opts.skipVols);
+  if (note.instrument !== "FCN") return { error: "The fair coupon is calculated for FCNs only." };
+  const m = note.model || {};
+  const basket = note.basket || [];
+  if (!basket.length) return { error: "Add at least one underlying." };
+  const missing = basket.filter(function (u) { return !(u.volPct > 0); }).map(function (u) { return u.ticker; });
+  if (!skipVols && missing.length) return { error: "Enter a volatility % for " + missing.join(", ") + " in the basket table, or calculate it below." };
+  const n = basket.length;
+  if (n > 1 && m.corrPct == null) return { error: "Enter the average correlation between the underlyings." };
+  if (m.ratePct == null) return { error: "Enter the risk-free rate." };
+  const corr = n > 1 ? m.corrPct / 100 : 0;
+  if (n > 1 && (corr >= 1 || corr <= -1 / (n - 1))) return { error: "That correlation is not possible for " + n + " underlyings (use a value below 100%)." };
+  const freq = note.frequency || 12;
+  const periods = Math.round((note.tenorMonths || 0) / (12 / freq));
+  if (periods < 1) return { error: "Enter the tenor in months." };
+  if (!(note.strikeLevelPct > 0) || !(note.koLevelPct > 0) || !(note.kiLevelPct > 0)) return { error: "Enter the strike, KO and KI levels." };
+  const sp = Math.max(1, Math.round(252 / freq));
+  const paths = periods * sp * n > 4000 ? 10000 : 20000;
+  return { params: {
+    vols: basket.map(function (u) { return skipVols ? 0.3 : u.volPct / 100; }),
+    corr: corr, rate: m.ratePct / 100, div: (m.divPct || 0) / 100,
+    freq: freq, periods: periods,
+    strike: note.strikeLevelPct / 100, ko: note.koLevelPct / 100, ki: note.kiLevelPct / 100,
+    kiDaily: m.kiObs !== "M", nonCall: Math.max(0, Math.min(periods, Math.floor(m.nonCall || 0))),
+    issuePrice: (note.issuePricePct || 100) / 100, redemption: (note.redemptionPct || 100) / 100,
+    paths: paths, seed: 12345,
+  } };
+}
+
+// Identifies the inputs a stored fair coupon was calculated from, so a stale result can be recognised.
+function fairInputsKey(note) {
+  return JSON.stringify([note.frequency, note.tenorMonths, note.strikeLevelPct, note.koLevelPct, note.kiLevelPct,
+    note.issuePricePct, note.redemptionPct,
+    (note.basket || []).map(function (u) { return [u.ticker, u.volPct || 0]; }),
+    modelKeyPart(note)]);
+}
+
+function modelKeyPart(note) {
+  const m = note.model || {};
+  return [m.corrPct, m.ratePct, m.divPct, m.kiObs, m.nonCall];
+}
+
+// What an implied volatility depends on: the terms, the coupon, the number of underlyings, the model settings and the margin.
+function impliedInputsKey(note) {
+  return JSON.stringify([note.frequency, note.tenorMonths, note.strikeLevelPct, note.koLevelPct, note.kiLevelPct,
+    note.issuePricePct, note.redemptionPct, note.couponRate, (note.basket || []).length, modelKeyPart(note),
+    (note.model || {}).marginPct || 0]);
+}
+
+function currentImpliedFor(note) {
+  return note.implied && note.implied.key === impliedInputsKey(note) ? note.implied : null;
+}
+
+// The stored result, when it still matches the note's current inputs.
+function currentFairFor(note) {
+  return note.fair && note.fair.key === fairInputsKey(note) ? note.fair : null;
 }
 
 function buildSchedule(note) {
@@ -1742,7 +2053,7 @@ function setNoteList(id, items) {
 
 // ---- Holdings table sorting: click a header to sort ascending, again for descending, a third time to
 // return to the order the holdings were added in. The choice is remembered on this device.
-const SORT_KEY = "fcn_tracker_sort_v3";
+const SORT_KEY = "fcn_tracker_sort_v4";
 let notesSort = null;
 
 function getNotesSort() {
@@ -1778,8 +2089,8 @@ function compareSortKeys(a, b) {
 // ---- Holdings table filters: one box per column under the headers. Text boxes match anywhere in the
 // column's text; number columns also accept >, <, >=, <= or = (for example >1000). Dropdown columns
 // match exactly. Filters apply on top of the current sort and reset when the app is reopened.
-const NOTES_SELECT_COLS = [1, 2, 3, 6, 19];            // Bank, Type, Ccy, Freq, Status
-const NOTES_NUMERIC_COLS = [4, 5, 11, 12, 13, 14, 15, 16, 17];
+const NOTES_SELECT_COLS = [1, 2, 3, 7, 20];            // Bank, Type, Ccy, Freq, Status
+const NOTES_NUMERIC_COLS = [4, 5, 6, 12, 13, 14, 15, 16, 17, 18];
 let notesFilters = [];
 let notesView = null;   // { headers, rows, keys, texts, order } for the table currently shown
 
@@ -1879,11 +2190,22 @@ function buildNotesFilterRow(v) {
   thead.appendChild(tr);
 }
 
+// Fair Coupon % cell: the stored model result for an FCN, with how the actual coupon compares.
+function fairCell(note) {
+  if (note.instrument === "BOND" || note.instrument === "FUND") return "—";
+  const fair = currentFairFor(note);
+  const imp = currentImpliedFor(note);
+  const impLine = imp && imp.volPct ? "<br><span class='muted'>implied vol " + imp.volPct.toFixed(0) + "%</span>" : "";
+  if (!fair) return (note.fair ? "—<br><span class='muted'>outdated, recalculate</span>" : "—") + impLine;
+  const gap = (note.couponRate || 0) - fair.fairPct;
+  return fair.fairPct.toFixed(2) + "<br><span class='muted'>coupon " + (gap >= 0 ? "+" : "−") + Math.abs(gap).toFixed(2) + " vs fair</span>" + impLine;
+}
+
 function renderNotesTable(computed) {
   const disp = getDisplayCcy();
   const native = disp === "NATIVE";
   const convCol = native ? "Annual Income" : "Annual Income (" + disp + ")";
-  const headers = ["Holding", "Bank", "Type", "Ccy", "Invested Amount", "Coupon %", "Freq", "Issue / Buy", "Settlement", "Ends",
+  const headers = ["Holding", "Bank", "Type", "Ccy", "Invested Amount", "Coupon %", "Fair Coupon %", "Freq", "Issue / Buy", "Settlement", "Ends",
     "Next Coupon", "Expected Monthly Coupon", "Annual Income", "Realised Income", "Received", convCol,
     "Yield %", "YTM %", "KO / KI %", "Status", ""];
   const sortKeys = [];
@@ -1933,6 +2255,7 @@ function renderNotesTable(computed) {
       ccy,
       (isFund && !calc.hasInvested) ? null : (note.notional || 0),
       isFund ? null : (note.couponRate || 0),
+      (isBond || isFund) ? null : (currentFairFor(note) ? currentFairFor(note).fairPct : null),
       Number(note.frequency) || 0,
       note.issueDate || null,
       (isBond || isFund) ? null : (note.settlementDate || null),
@@ -1957,6 +2280,7 @@ function renderNotesTable(computed) {
       esc(ccy),
       (isFund && !calc.hasInvested) ? "—" : formatMoney(note.notional || 0),
       isFund ? "—" : (note.couponRate || 0).toFixed(2),
+      fairCell(note),
       esc(FREQ_LABEL[note.frequency] || note.frequency),
       esc(fmtIso(note.issueDate || "")),
       (isBond || isFund || !note.settlementDate) ? "—" : esc(fmtIso(note.settlementDate)),
@@ -3192,6 +3516,199 @@ function refreshDividendInEditor() {
   });
 }
 
+// ---- Fair coupon in the editor ----
+function fairPctText(v) { return (Math.round(v * 100) / 100).toFixed(2) + "%"; }
+
+function fairChips(note, fair) {
+  const coupon = note.couponRate || 0;
+  const gap = coupon - fair.fairPct;
+  const value = (coupon / 100 * fair.A + fair.R) * 100;
+  const chips = [
+    "Fair coupon " + fairPctText(fair.fairPct) + " a year (± " + fairPctText(fair.sePct) + ")",
+    "Your coupon " + fairPctText(coupon) + (gap >= 0 ? " — " + fairPctText(gap) + " above fair" : " — " + fairPctText(-gap) + " below fair"),
+    "Modelled value at your coupon " + (Math.round(value * 10) / 10).toFixed(1) + "% of par",
+    "Early knock-out " + Math.round(fair.pKO * 100) + "%",
+    "KI hit " + Math.round(fair.pKI * 100) + "%",
+    "Loss at maturity " + Math.round(fair.pLoss * 100) + "%" + (fair.avgLossRedemption != null ? " (average redemption " + Math.round(fair.avgLossRedemption * 100) + "% of par)" : ""),
+    "Expected life " + (Math.round(fair.lifeYears * 12 * 10) / 10) + " months",
+  ];
+  return chips;
+}
+
+function renderFairResult(note) {
+  const box = document.getElementById("fairResult");
+  if (!box) return;
+  box.textContent = "";
+  const fair = currentFair;
+  if (!fair) { setNoteList("fairNote", []); return; }
+  const stale = fair.key !== fairInputsKey(note);
+  const head = document.createElement("span");
+  head.className = "trend-head";
+  head.textContent = "Fair coupon estimate" + (fair.runAt ? " (calculated " + fmtIso(fair.runAt) + ")" : "");
+  box.appendChild(head);
+  fairChips(note, fair).forEach(function (t) {
+    const chip = document.createElement("span");
+    chip.className = "trend-chip";
+    chip.textContent = t;
+    box.appendChild(chip);
+  });
+  const notes = [];
+  if (stale) notes.push("The inputs have changed since this was calculated — tap Calculate fair coupon again before relying on it.");
+  notes.push("The fair coupon is the coupon that values the note at its issue price under the assumptions above. It is an estimate: it moves a lot with the volatilities and correlation you enter.");
+  notes.push("Model: lognormal paths with one average correlation, checked daily for KI (or at maturity), KO checked on coupon dates, loss at maturity = worst performer ÷ strike. Coupons are treated as paid in equal instalments each period.");
+  notes.push("A coupon above the fair coupon means the model thinks you are paid more than the risk costs; below it can reflect the issuer’s margin, or volatility inputs that are too low.");
+  setNoteList("fairNote", notes);
+}
+
+function calculateFairCoupon() {
+  const btn = document.getElementById("fairBtn");
+  const note = readForm();
+  const built = buildFairParams(note);
+  if (built.error) { currentFair = null; renderFairResult(note); setNoteList("fairNote", [built.error]); return; }
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Calculating…";
+  setTimeout(function () {
+    try {
+      const r = fairCouponModel(built.params);
+      r.key = fairInputsKey(note);
+      r.runAt = todayIso();
+      currentFair = r;
+      renderFairResult(note);
+    } catch (e) {
+      currentFair = null;
+      renderFairResult(note);
+      setNoteList("fairNote", ["Couldn’t calculate: " + (e && e.message ? e.message : "unknown error") + "."]);
+    }
+    btn.disabled = false;
+    btn.textContent = label;
+  }, 30);
+}
+
+// ---- Volatility helper in the editor ----
+function basketRows() {
+  return Array.prototype.slice.call(document.querySelectorAll("#underlyingRows tr"));
+}
+
+function refreshHistSelect() {
+  const sel = document.getElementById("histTicker");
+  if (!sel) return;
+  const keep = sel.value;
+  const tickers = basketRows().map(function (tr) { return tr.querySelector(".ticker-input").value.trim(); }).filter(Boolean);
+  sel.innerHTML = "";
+  tickers.forEach(function (t) {
+    const o = document.createElement("option");
+    o.value = t; o.textContent = t;
+    sel.appendChild(o);
+  });
+  if (tickers.indexOf(keep) >= 0) sel.value = keep;
+}
+
+function renderVolResult() {
+  const box = document.getElementById("volResult");
+  if (!box) return;
+  box.textContent = "";
+  const addChip = function (text, cls) {
+    const chip = document.createElement("span");
+    chip.className = cls || "trend-chip";
+    chip.textContent = text;
+    box.appendChild(chip);
+  };
+  let usedSum = 0, usedN = 0, anything = false;
+  basketRows().forEach(function (tr) {
+    const t = tr.querySelector(".ticker-input").value.trim();
+    if (!t) return;
+    const used = parseFloat(tr.querySelector(".vol-input").value);
+    const hist = parseFloat(tr.dataset.histVol);
+    if (used > 0) { usedSum += used; usedN++; }
+    if (!(hist > 0) && !(used > 0)) return;
+    anything = true;
+    addChip(t + ": " + (hist > 0 ? "historical " + hist.toFixed(1) + "%" + (tr.dataset.histN ? " (" + tr.dataset.histN + " returns)" : "") + " · " : "") +
+      (used > 0 ? "used " + used.toFixed(1) + "%" : "used: not set"));
+  });
+  const notes = [];
+  const note = readForm();
+  if (currentImplied) {
+    anything = true;
+    const stale = currentImplied.key !== impliedInputsKey(note);
+    if (currentImplied.bound) {
+      addChip("Implied by the bank’s coupon: " + (currentImplied.bound === "low" ? "below 5%" : "above 150%"));
+      notes.push(currentImplied.bound === "low"
+        ? "At the bank’s coupon the note is worth less than its issue price even at 5% volatility, so the coupon is low for these terms."
+        : "At the bank’s coupon the note is worth more than its issue price even at 150% volatility, so the coupon is very generous for these terms.");
+    } else {
+      addChip("Implied by the bank’s coupon: " + currentImplied.volPct.toFixed(1) + "% (the same for every underlying)", "trend-chip");
+      if (usedN) {
+        const avg = usedSum / usedN;
+        const diff = currentImplied.volPct - avg;
+        notes.push("The coupon is priced as if the underlyings had " + currentImplied.volPct.toFixed(1) + "% volatility; yours average " + avg.toFixed(1) + "%. " +
+          (Math.abs(diff) < 1 ? "These are close, so the coupon looks fair at your volatilities."
+            : diff < 0 ? "The bank is pricing in less volatility than you use, so at your volatilities the coupon is below fair."
+            : "The bank is pricing in more volatility than you use, so at your volatilities the coupon is above fair."));
+      }
+    }
+    if (stale) notes.push("The terms or settings have changed since the implied volatility was calculated — calculate it again.");
+    notes.push("Implied volatility is approximate (about ±1 point) and assumes one volatility for the whole basket and the issuer margin entered above.");
+  }
+  if (!anything) { setNoteList("volNote", []); return; }
+  setNoteList("volNote", notes);
+}
+
+function calculateHistVol() {
+  const ticker = val("histTicker");
+  const row = basketRows().filter(function (tr) { return tr.querySelector(".ticker-input").value.trim() === ticker; })[0];
+  if (!ticker || !row) { setNoteList("volNote", ["Add the underlying to the basket first, then pick it here."]); return; }
+  let r;
+  try { r = histVolFromPrices(val("histPrices"), parseInt(val("histFreq"), 10) || 252); }
+  catch (e) { setNoteList("volNote", [e.message]); return; }
+  const rounded = Math.round(r.volPct * 10) / 10;
+  row.dataset.histVol = String(rounded);
+  row.dataset.histN = String(r.n);
+  row.querySelector(".vol-input").value = rounded;
+  histSeries[ticker] = r.rets;
+  renderVolResult();
+  const msgs = [ticker + ": volatility set to " + rounded.toFixed(1) + "% from " + r.n + " returns. You can still edit it in the basket table."];
+  const tickers = basketRows().map(function (tr) { return tr.querySelector(".ticker-input").value.trim(); }).filter(Boolean);
+  const have = tickers.filter(function (t) { return histSeries[t]; });
+  if (have.length >= 2) {
+    const c = histCorrelation(have.map(function (t) { return histSeries[t]; }));
+    if (c) {
+      setVal("fcCorr", Math.round(c.avg * 100));
+      msgs.push("Average correlation of " + have.join(", ") + " is " + Math.round(c.avg * 100) + "% over " + c.n + " aligned returns, and has been filled in above.");
+    } else {
+      msgs.push("Correlation not calculated: paste the same number of prices for each underlying, covering the same dates.");
+    }
+  }
+  const lines = document.getElementById("volNote");
+  setNoteList("volNote", msgs.concat(Array.prototype.map.call(lines.children, function (li) { return li.textContent; })));
+}
+
+function calculateImpliedVol() {
+  const btn = document.getElementById("impliedBtn");
+  const note = readForm();
+  const built = buildFairParams(note, { skipVols: true });
+  if (built.error) { setNoteList("volNote", [built.error]); return; }
+  if (!(note.couponRate > 0)) { setNoteList("volNote", ["Enter the bank’s coupon first."]); return; }
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Solving…";
+  setTimeout(function () {
+    try {
+      const r = solveImpliedVol(built.params, note.couponRate, (note.model || {}).marginPct || 0);
+      r.key = impliedInputsKey(note);
+      r.runAt = todayIso();
+      currentImplied = r;
+      renderVolResult();
+    } catch (e) {
+      currentImplied = null;
+      renderVolResult();
+      setNoteList("volNote", ["Couldn’t solve for the volatility: " + (e && e.message ? e.message : "unknown error") + "."]);
+    }
+    btn.disabled = false;
+    btn.textContent = label;
+  }, 30);
+}
+
 function renderFundResults() {
   const note = readForm();
   const problem = fundProblem(note);
@@ -3254,9 +3771,17 @@ function renderFundResults() {
 // UI wiring: tabs, note editor form, save/edit/delete, editor results panel.
 
 let currentEditId = null;
+let currentImplied = null;   // the implied volatility result shown in the editor (saved with the note)
+let histSeries = {};          // ticker -> historical log returns, for this editing session only
+let currentFair = null;   // the fair coupon result shown in the editor (saved with the note)
 
 function val(id) { return document.getElementById(id).value; }
 function setVal(id, v) { document.getElementById(id).value = v; }
+function numOrNull(id) {
+  const t = val(id).trim();
+  const n = parseFloat(t);
+  return t === "" || isNaN(n) ? null : n;
+}
 function num(id, fallback) {
   const n = parseFloat(val(id));
   return isNaN(n) ? (fallback || 0) : n;
@@ -3297,7 +3822,13 @@ function addUnderlyingRow(ticker, initialFixing, overrides) {
     '<td><input type="number" class="row-input price-input strike-input" min="0" step="any" inputmode="decimal" placeholder="—"></td>' +
     '<td><input type="number" class="row-input price-input ko-input" min="0" step="any" inputmode="decimal" placeholder="—"></td>' +
     '<td><input type="number" class="row-input price-input ki-input" min="0" step="any" inputmode="decimal" placeholder="—"></td>' +
+    '<td><input type="number" class="row-input vol-input" min="1" max="300" step="0.1" inputmode="decimal" placeholder="e.g. 40"></td>' +
     '<td><button type="button" class="mini-btn danger remove-btn">Remove</button></td>';
+  tr.querySelector(".vol-input").value = overrides && overrides.volPct > 0 ? overrides.volPct : "";
+  if (overrides && overrides.histVolPct > 0) {
+    tr.dataset.histVol = String(overrides.histVolPct);
+    if (overrides.histN) tr.dataset.histN = String(overrides.histN);
+  }
   tr.querySelector(".ticker-input").value = ticker || "";
   tr.querySelector(".fixing-input").value = initialFixing == null ? 100 : initialFixing;
   tr.querySelector(".fixing-input").addEventListener("input", recomputeBasketPrices);
@@ -3346,6 +3877,10 @@ function readBasket() {
         const v = parseFloat(inp.value);
         if (inp.dataset.manual && v > 0) item[f[1]] = v;
       });
+      const vol = parseFloat(tr.querySelector(".vol-input").value);
+      if (vol > 0) item.volPct = vol;
+      const hv = parseFloat(tr.dataset.histVol);
+      if (hv > 0) { item.histVolPct = hv; if (tr.dataset.histN) item.histN = parseInt(tr.dataset.histN, 10); }
       basket.push(item);
     }
   });
@@ -3382,6 +3917,12 @@ function readForm() {
     dividendPerUnit: num("dividendPerUnit"),
     dividendAsOf: readDate("dividendAsOf"),
     investedAmount: num("investedAmount"),
+    model: {
+      corrPct: numOrNull("fcCorr"), ratePct: numOrNull("fcRate"), divPct: num("fcDiv"),
+      kiObs: val("fcKiObs") === "M" ? "M" : "D", nonCall: num("fcNonCall"), marginPct: num("fcMargin"),
+    },
+    fair: currentFair,
+    implied: currentImplied,
     basket: readBasket(),
   };
   if (note.instrument === "BOND") {
@@ -3411,6 +3952,7 @@ function readForm() {
     note.purchasePricePct = 100;
     note.notional = note.investedAmount;
   }
+  if (note.instrument !== "FCN") { delete note.model; delete note.fair; delete note.implied; }
   return note;
 }
 
@@ -3458,11 +4000,24 @@ function writeForm(note) {
   setVal("kiLevel", note.kiLevelPct == null ? 70 : note.kiLevelPct);
   setDate("koDate", note.koDate);
   setDate("settlementDate", note.settlementDate);
+  const model = note.model || {};
+  setVal("fcCorr", model.corrPct == null ? "" : model.corrPct);
+  setVal("fcRate", model.ratePct == null ? "" : model.ratePct);
+  setVal("fcDiv", model.divPct ? model.divPct : "");
+  setVal("fcKiObs", model.kiObs === "M" ? "M" : "D");
+  setVal("fcNonCall", model.nonCall ? model.nonCall : 0);
+  setVal("fcMargin", model.marginPct ? model.marginPct : "");
+  currentFair = note.fair || null;
+  currentImplied = note.implied || null;
+  histSeries = {};
   document.getElementById("underlyingRows").innerHTML = "";
   (note.basket && note.basket.length ? note.basket : [{ ticker: "", initialFixing: 100 }])
     .forEach(function (b) { addUnderlyingRow(b.ticker, b.initialFixing, b); });
   recomputeBasketPrices();
   applyInstrumentUI();
+  refreshHistSelect();
+  renderVolResult();
+  renderFairResult(note);
   document.getElementById("resultsPanel").style.display = "none";
   document.getElementById("saveFeedback").textContent = "";
   setNoteList("parseFeedback", []);
@@ -3728,6 +4283,13 @@ document.addEventListener("DOMContentLoaded", function () {
 
   document.getElementById("exportBtn").addEventListener("click", exportBook);
   document.getElementById("fxRefreshBtn").addEventListener("click", refreshFxRates);
+  document.getElementById("fairBtn").addEventListener("click", calculateFairCoupon);
+  document.getElementById("histBtn").addEventListener("click", calculateHistVol);
+  document.getElementById("impliedBtn").addEventListener("click", calculateImpliedVol);
+  document.getElementById("underlyingRows").addEventListener("input", function (e) {
+    const c = e.target.classList;
+    if (c && (c.contains("ticker-input") || c.contains("vol-input"))) { refreshHistSelect(); renderVolResult(); }
+  });
   document.getElementById("dividendRefreshBtn").addEventListener("click", refreshDividendInEditor);
   document.getElementById("dividendHistoryBtn").addEventListener("click", function () { openFundLookup("history"); });
   document.getElementById("dividendSearchBtn").addEventListener("click", function () { openFundLookup("search"); });
