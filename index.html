@@ -666,6 +666,14 @@ button, select, input, label { touch-action: manipulation; }   /* no double-tap-
     </section>
 
     <section class="panel">
+      <h2>You vs Bank — each FCN</h2>
+      <div class="table-wrap">
+        <table id="youBankTable"><thead></thead><tbody></tbody></table>
+      </div>
+      <ul class="note-list" id="youBankNote" hidden></ul>
+    </section>
+
+    <section class="panel">
       <div class="panel-head">
         <h2>Holdings in Book</h2>
         <div class="btn-row">
@@ -1231,12 +1239,46 @@ function prepareFcnValuation(note, calc) {
 function valuationKey(note) {
   return JSON.stringify([note.notional, note.couponRate, note.frequency, note.strikeLevelPct, note.koLevelPct, note.kiLevelPct,
     note.kiType, note.kiHit, note.issueDate, note.settlementDate, note.firstCallDate, note.maturityDate, note.tenorMonths,
+    note.issuePricePct, note.marketPricePct || 0,
     (note.basket || []).map(function (u) { return [u.ticker, u.initialFixing, u.spotPrice, u.volPct || 0]; })]);
 }
 
 function summarizeValuation(v, key, asOfIso) {
   return { key: key, asOf: asOfIso, source: v.source, cleanPct: v.cleanPct, cleanValue: v.cleanValue, accrued: v.accrued,
     dirtyValue: v.dirtyValue, dirtyPct: v.dirtyPct, received: v.received, totalExit: v.totalExit, exitPnl: v.exitPnl, exitPnlPct: v.exitPnlPct };
+}
+
+// "You vs bank": what the bank builds into the note, estimated with the same model.
+//  - margin at issue: the issue price less the model's mid value on day one (spots = initial fixings);
+//  - bid spread if you sell today: assumed (the model's spread) for a model price, or, for a bank quote,
+//    the model's mid price today less the bank's bid.
+function youVsBankFigures(cfg, v, spots, asOf, issuePricePct) {
+  const atIssue = estimateCleanPriceMC(cfg, cfg.settlement, cfg.inits, false);
+  const midAtIssuePct = atIssue + cfg.spread * 100;            // no accrued coupon on the settlement day
+  const marginPct = (issuePricePct || 100) - midAtIssuePct;
+  let bidSpreadPct = null, bidSpreadSource = "";
+  if (v.source === "Bank quote") {
+    if (spots) {
+      const modelClean = estimateCleanPriceMC(cfg, asOf, spots, v.kiNow);
+      bidSpreadPct = modelClean + cfg.spread * 100 - v.cleanPct;
+      bidSpreadSource = "model mid price less the bank's quote";
+    }
+  } else { bidSpreadPct = cfg.spread * 100; bidSpreadSource = "assumed"; }
+  return {
+    marginPct: marginPct, marginValue: cfg.principal * marginPct / 100,
+    bidSpreadPct: bidSpreadPct, bidSpreadValue: bidSpreadPct == null ? null : cfg.principal * bidSpreadPct / 100,
+    bidSpreadSource: bidSpreadSource,
+  };
+}
+
+function summarizeYouVsBank(v, extra, cfg, key, asOfIso, ccy) {
+  return {
+    key: key, asOf: asOfIso, ccy: ccy, source: v.source, invested: cfg.principal,
+    dirtyValue: v.dirtyValue, received: v.received, totalExit: v.totalExit, exitPnl: v.exitPnl, exitPnlPct: v.exitPnlPct,
+    matPnl: v.maturity ? v.maturity.pnl : null, matPnlPct: v.maturity ? v.maturity.pnlPct : null,
+    marginPct: extra.marginPct, marginValue: extra.marginValue,
+    bidSpreadPct: extra.bidSpreadPct, bidSpreadValue: extra.bidSpreadValue, bidSpreadSource: extra.bidSpreadSource,
+  };
 }
 
 // The valuation to show for a holding in the table: from a bank quote (instant) or the stored model estimate.
@@ -1765,6 +1807,7 @@ function renderPortfolio() {
   renderIncomeSummary(computed);
   renderBackupBar();
   renderTrend(computed);
+  renderYouVsBank(computed);
 }
 
 function bookCurrencies(computed) {
@@ -2147,6 +2190,65 @@ function buildNotesFilterRow(v) {
     tr.appendChild(td);
   }
   thead.appendChild(tr);
+}
+
+// ---- You vs Bank: for each live FCN, your profit or loss next to what the bank builds into the note ----
+function renderYouVsBank(computed) {
+  const today = new Date();
+  const live = computed.filter(function (c) {
+    return c.note.instrument !== "BOND" && c.note.instrument !== "FUND" && isActive(c.calc, today);
+  });
+  const headers = ["Holding", "You paid", "You’d get if sold today", "Coupons received", "Your profit / loss if sold today",
+    "Your profit / loss at maturity (prices unchanged)", "Bank’s margin built in (est.)", "Bank’s bid spread if you sell (est.)", "Based on"];
+  const disp = getDisplayCcy() === "NATIVE" ? "SGD" : getDisplayCcy();
+  const pnl = function (x, pct) { return x == null ? "—" : formatMoney(x) + "<br><span class='muted'>" + (pct >= 0 ? "+" : "−") + Math.abs(pct).toFixed(1) + "%</span>"; };
+  const rows = [];
+  const tot = { paid: 0, get: 0, rec: 0, pnl: 0, mat: 0, margin: 0, spread: 0 };
+  let included = 0, waiting = 0, noFx = 0, noMat = 0, noSpread = 0;
+  live.forEach(function (c) {
+    const n = c.note, st = n.youVsBank;
+    const label = "<strong>" + esc(noteLabel(n)) + "</strong><br><span class='muted'>" + esc(n.currency || "USD") + "</span>";
+    if (!st || st.key !== valuationKey(n)) {
+      waiting++;
+      rows.push([label, formatMoney(n.notional || 0), "—", "—", "—", "—", "—", "—", "<span class='muted'>tap Update valuations</span>"]);
+      return;
+    }
+    rows.push([
+      label, formatMoney(st.invested), formatMoney(st.dirtyValue), formatMoney(st.received),
+      pnl(st.exitPnl, st.exitPnlPct), pnl(st.matPnl, st.matPnlPct),
+      formatMoney(st.marginValue) + "<br><span class='muted'>" + st.marginPct.toFixed(2) + "% of par</span>",
+      st.bidSpreadValue == null ? "—" : formatMoney(st.bidSpreadValue) + "<br><span class='muted'>" + st.bidSpreadPct.toFixed(2) + "% of par</span>",
+      esc(st.source) + (st.asOf ? "<br><span class='muted'>as of " + esc(fmtIso(st.asOf)) + "</span>" : ""),
+    ]);
+    const cv = function (v) { return v == null ? null : convert(v, st.ccy || "USD", disp); };
+    const parts = { paid: cv(st.invested), get: cv(st.dirtyValue), rec: cv(st.received), pnl: cv(st.exitPnl), margin: cv(st.marginValue) };
+    if (Object.keys(parts).some(function (k) { return parts[k] == null; })) { noFx++; return; }
+    included++;
+    ["paid", "get", "rec", "pnl", "margin"].forEach(function (k) { tot[k] += parts[k]; });
+    const mat = cv(st.matPnl);
+    if (mat == null) noMat++; else tot.mat += mat;
+    const sp = cv(st.bidSpreadValue);
+    if (sp == null) noSpread++; else tot.spread += sp;
+  });
+  if (included) {
+    const pct = tot.paid ? tot.pnl / tot.paid * 100 : 0;
+    rows.push(["<strong>Total (" + esc(disp) + ")</strong>", "<strong>" + formatMoney(tot.paid) + "</strong>", "<strong>" + formatMoney(tot.get) + "</strong>", "<strong>" + formatMoney(tot.rec) + "</strong>",
+      "<strong>" + formatMoney(tot.pnl) + "</strong><br><span class='muted'>" + (pct >= 0 ? "+" : "−") + Math.abs(pct).toFixed(1) + "%</span>",
+      noMat ? "—" : "<strong>" + formatMoney(tot.mat) + "</strong>",
+      "<strong>" + formatMoney(tot.margin) + "</strong>", noSpread ? "—" : "<strong>" + formatMoney(tot.spread) + "</strong>", ""]);
+  }
+  fillTable("youBankTable", headers, rows);
+  const notes = [];
+  if (!live.length) notes.push("No live FCNs to compare yet.");
+  if (waiting) notes.push(waiting + " live FCN" + (waiting === 1 ? " is" : "s are") + " waiting for a valuation. Enter each underlying’s current price in the basket table (or the bank’s Market price), then tap Update valuations in Holdings in Book.");
+  if (noFx) notes.push(noFx + " FCN" + (noFx === 1 ? " has" : "s have") + " no FX rate to " + disp + " and " + (noFx === 1 ? "is" : "are") + " left out of the total.");
+  if (live.length) {
+    notes.push("You paid: the invested amount. You’d get if sold today: the dirty value, which is the clean price plus the coupon built up since the last payment.");
+    notes.push("Your profit or loss if sold today = what you’d get + coupons already received − what you paid. At maturity assumes today’s prices stay unchanged: either paid back at par or converted into shares, plus all the coupons.");
+    notes.push("Bank’s margin built in: the gap between the issue price and the model’s fair value on day one, which is roughly the bank’s fee for structuring the note. Bank’s bid spread: what the bank keeps if you sell today. It is assumed for a model price, or worked out against the bank’s quote.");
+    notes.push("Your loss is not the bank’s gain. The bank hedges the note, so its profit is mainly the margin and the spread. Both are estimates that depend on the volatility and correlation assumptions.");
+  }
+  setNoteList("youBankNote", notes);
 }
 
 function renderNotesTable(computed) {
@@ -3469,27 +3571,27 @@ function refreshDividendInEditor() {
   });
 }
 
-// ---- FCN valuation in the editor (clean and dirty price) ----
+// ---- FCN valuation in the editor (clean and dirty price, and you vs bank) ----
 function money2(v) { return formatMoney(v); }
 
 function renderValuation(note, calc) {
   const block = document.getElementById("valuationBlock");
   if (!block) return;
-  const hide = function () { block.style.display = "none"; };
-  if (note.instrument === "BOND" || note.instrument === "FUND" || !isActive(calc, new Date())) { hide(); return; }
+  if (note.instrument === "BOND" || note.instrument === "FUND" || !isActive(calc, new Date())) { block.style.display = "none"; return; }
   block.style.display = "";
   const prep = prepareFcnValuation(note, calc);
   const show = function (stats, notes) { renderStats(stats, "valuationStats"); setNoteList("valuationNote", notes); };
-  if (prep.error) { currentValuation = null; show([], [prep.error]); return; }
+  if (prep.error) { currentValuation = null; currentYouVsBank = null; show([], [prep.error]); return; }
   const bank = note.marketPricePct > 0;
   if (!bank && !prep.spots) {
     const missing = (note.basket || []).filter(function (u) { return !(u.spotPrice > 0); }).map(function (u) { return u.ticker; });
-    currentValuation = null;
+    currentValuation = null; currentYouVsBank = null;
     show([], ["Enter the current price for " + missing.join(", ") + " in the basket table to estimate the price, or enter the bank’s Market price above."]);
     return;
   }
-  const finish = function (v) {
+  const finish = function (v, extra) {
     const ccy = note.currency || "USD";
+    const pnl = function (x, pct) { return money2(x) + " (" + pct.toFixed(2) + "%)"; };
     const stats = [
       { label: "Clean Price % (" + v.source + ")", value: (Math.round(v.cleanPct * 10000) / 10000).toFixed(4) },
       { label: "Dirty Price %", value: (Math.round(v.dirtyPct * 10000) / 10000).toFixed(4) },
@@ -3497,8 +3599,8 @@ function renderValuation(note, calc) {
       { label: "Accrued Coupon " + ccy, value: money2(v.accrued) },
       { label: "Dirty Value " + ccy, value: money2(v.dirtyValue) },
       { label: "Coupons Received " + ccy, value: money2(v.received) },
-      { label: "Value if Exited Today " + ccy, value: money2(v.totalExit) },
-      { label: "Exit P&L " + ccy, value: money2(v.exitPnl) + " (" + v.exitPnlPct.toFixed(2) + "%)" },
+      { label: "Your Value if Sold Today " + ccy, value: money2(v.totalExit) },
+      { label: "Your Profit / Loss if Sold Today " + ccy, value: pnl(v.exitPnl, v.exitPnlPct) },
     ];
     const notes = [];
     if (v.worst) {
@@ -3507,38 +3609,36 @@ function renderValuation(note, calc) {
       const m = v.maturity;
       stats.push({ label: "If Held to Maturity", value: m.outcome });
       if (m.shares > 0) stats.push({ label: "Shares Delivered (" + v.worst.ticker + ")", value: m.shares.toFixed(2) });
-      stats.push({ label: "Maturity Total Value " + ccy, value: money2(m.total) });
-      stats.push({ label: "Maturity P&L " + ccy, value: money2(m.pnl) + " (" + m.pnlPct.toFixed(2) + "%)" });
+      stats.push({ label: "Your Maturity Profit / Loss " + ccy, value: pnl(m.pnl, m.pnlPct) });
       if (v.below) notes.push("The worst performer is below the KI level today" + (note.kiType === "D" ? "." : ", which only matters if it is still below at maturity (KI is checked at maturity)."));
     } else {
       notes.push("Enter the current price of each underlying to see the worst performer, barrier prices and the hold-to-maturity projection.");
     }
+    stats.push({ label: "Bank’s Margin Built In, est. " + ccy, value: pnl(extra.marginValue, extra.marginPct) });
+    stats.push({ label: "Bank’s Bid Spread if You Sell, est. " + ccy, value: extra.bidSpreadValue == null ? "—" : pnl(extra.bidSpreadValue, extra.bidSpreadPct) });
     notes.push(v.source === "Bank quote"
       ? "Clean price is the bank’s quote from the Market price box. Dirty value = clean value + accrued coupon."
-      : "Clean price is a Monte Carlo estimate of the secondary-market bid: " + (VAL_DEFAULTS.paths).toLocaleString("en-US") + " paths, volatility " + Math.round(VAL_DEFAULTS.vol * 100) + "% unless set per underlying, correlation " + Math.round(VAL_DEFAULTS.corr * 100) + "%, risk-free rate " + (VAL_DEFAULTS.riskFree * 100).toFixed(1) + "%, less a " + (VAL_DEFAULTS.spread * 100).toFixed(1) + "% unwind spread. Dirty value = clean value + accrued coupon.");
-    notes.push("Exit P&L counts coupons already received. The hold-to-maturity projection assumes today’s prices stay unchanged.");
+      : "Clean price is a Monte Carlo estimate of the secondary-market bid: " + VAL_DEFAULTS.paths.toLocaleString("en-US") + " paths, volatility " + Math.round(VAL_DEFAULTS.vol * 100) + "% unless set per underlying, correlation " + Math.round(VAL_DEFAULTS.corr * 100) + "%, risk-free rate " + (VAL_DEFAULTS.riskFree * 100).toFixed(1) + "%, less a " + (VAL_DEFAULTS.spread * 100).toFixed(1) + "% unwind spread. Dirty value = clean value + accrued coupon.");
+    notes.push("Your profit or loss counts coupons already received. The maturity projection assumes today’s prices stay unchanged.");
+    notes.push("The bank’s margin is the gap between the issue price and the model’s fair value on day one, so it depends on the volatility assumptions. Your loss is not the bank’s gain: the bank hedges the note, and its profit is mainly this margin and the spread.");
     show(stats, notes);
   };
-  if (bank) {
-    try {
-      const v = evaluateFcnValue(prep.cfg, prep.asOf, prep.spots, Object.assign({}, prep.opts, { bankCleanPct: note.marketPricePct }));
-      currentValuation = null;
-      finish(v);
-    } catch (e) { currentValuation = null; show([], ["Couldn’t calculate: " + (e && e.message ? e.message : "unknown error") + "."]); }
-    return;
-  }
-  renderStats([{ label: "Estimating the clean price…", value: "…" }], "valuationStats");
+  renderStats([{ label: "Calculating…", value: "…" }], "valuationStats");
   setNoteList("valuationNote", []);
   setTimeout(function () {
     try {
-      const v = evaluateFcnValue(prep.cfg, prep.asOf, prep.spots, prep.opts);
-      currentValuation = summarizeValuation(v, valuationKey(note), formatDate(prep.asOf));
-      finish(v);
-    } catch (e) { currentValuation = null; show([], ["Couldn’t calculate: " + (e && e.message ? e.message : "unknown error") + "."]); }
+      const opts = bank ? Object.assign({}, prep.opts, { bankCleanPct: note.marketPricePct }) : prep.opts;
+      const v = evaluateFcnValue(prep.cfg, prep.asOf, prep.spots, opts);
+      const extra = youVsBankFigures(prep.cfg, v, prep.spots, prep.asOf, note.issuePricePct);
+      const key = valuationKey(note), asOfIso = formatDate(prep.asOf);
+      currentValuation = bank ? null : summarizeValuation(v, key, asOfIso);
+      currentYouVsBank = summarizeYouVsBank(v, extra, prep.cfg, key, asOfIso, note.currency || "USD");
+      finish(v, extra);
+    } catch (e) { currentValuation = null; currentYouVsBank = null; show([], ["Couldn’t calculate: " + (e && e.message ? e.message : "unknown error") + "."]); }
   }, 30);
 }
 
-// Re-estimate every live FCN that has current prices entered and no bank quote, one at a time.
+// Re-estimate every live FCN that has a bank quote or current prices entered, one at a time.
 function updateValuations() {
   const btn = document.getElementById("valuationBtn");
   const notes = loadNotes();
@@ -3547,13 +3647,13 @@ function updateValuations() {
   notes.forEach(function (n) {
     if (n.instrument === "BOND" || n.instrument === "FUND") return;
     const calc = computeNote(n);
-    if (!isActive(calc, new Date()) || n.marketPricePct > 0) return;
+    if (!isActive(calc, new Date())) return;
     const prep = prepareFcnValuation(n, calc);
-    if (prep.error || !prep.spots) { skipped++; return; }
+    if (prep.error || (!prep.spots && !(n.marketPricePct > 0))) { skipped++; return; }
     todo.push({ note: n, prep: prep });
   });
   if (!todo.length) {
-    alert(skipped ? skipped + " live note" + (skipped === 1 ? " has" : "s have") + " no current prices entered. Open it, type each underlying’s current price in the basket table, and save." : "No live notes need an estimate: notes with a bank quote use it directly.");
+    alert(skipped ? skipped + " live note" + (skipped === 1 ? " has" : "s have") + " no current prices or bank quote entered. Open it, type each underlying’s current price in the basket table (or the bank’s Market price), and save." : "There are no live FCNs to value.");
     return;
   }
   const label = btn.textContent;
@@ -3565,15 +3665,19 @@ function updateValuations() {
       btn.disabled = false;
       btn.textContent = label;
       renderPortfolio();
-      if (skipped) alert("Updated " + todo.length + " valuation" + (todo.length === 1 ? "" : "s") + ". " + skipped + " note" + (skipped === 1 ? " was" : "s were") + " skipped because no current prices are entered.");
+      if (skipped) alert("Updated " + todo.length + " note" + (todo.length === 1 ? "" : "s") + ". " + skipped + " live note" + (skipped === 1 ? " was" : "s were") + " skipped because no current prices or bank quote are entered.");
       return;
     }
     btn.textContent = "Valuing " + (i + 1) + "/" + todo.length + "…";
     setTimeout(function () {
-      const t = todo[i];
+      const t = todo[i], n = t.note, bank = n.marketPricePct > 0;
       try {
-        const v = evaluateFcnValue(t.prep.cfg, t.prep.asOf, t.prep.spots, t.prep.opts);
-        t.note.valuation = summarizeValuation(v, valuationKey(t.note), formatDate(t.prep.asOf));
+        const opts = bank ? Object.assign({}, t.prep.opts, { bankCleanPct: n.marketPricePct }) : t.prep.opts;
+        const v = evaluateFcnValue(t.prep.cfg, t.prep.asOf, t.prep.spots, opts);
+        const extra = youVsBankFigures(t.prep.cfg, v, t.prep.spots, t.prep.asOf, n.issuePricePct);
+        const key = valuationKey(n), asOfIso = formatDate(t.prep.asOf);
+        if (!bank) n.valuation = summarizeValuation(v, key, asOfIso);
+        n.youVsBank = summarizeYouVsBank(v, extra, t.prep.cfg, key, asOfIso, n.currency || "USD");
       } catch (e) { /* leave any earlier estimate alone */ }
       i++;
       step();
@@ -3658,6 +3762,7 @@ function renderFundResults() {
 
 let currentEditId = null;
 let currentValuation = null;   // the model price estimate shown in the editor (saved with the note)
+let currentYouVsBank = null;  // the you-vs-bank summary shown in the editor (saved with the note)
 
 function val(id) { return document.getElementById(id).value; }
 function setVal(id, v) { document.getElementById(id).value = v; }
@@ -3802,6 +3907,7 @@ function readForm() {
     kiHit: val("kiHit") === "Y",
     firstCallDate: readDate("firstCallDate"),
     valuation: currentValuation,
+    youVsBank: currentYouVsBank,
     basket: readBasket(),
   };
   if (note.instrument === "BOND") {
@@ -3831,7 +3937,7 @@ function readForm() {
     note.purchasePricePct = 100;
     note.notional = note.investedAmount;
   }
-  if (note.instrument !== "FCN") { delete note.kiType; delete note.kiHit; delete note.firstCallDate; delete note.valuation; delete note.marketPricePct; delete note.marketPriceDate; }
+  if (note.instrument !== "FCN") { delete note.kiType; delete note.kiHit; delete note.firstCallDate; delete note.valuation; delete note.youVsBank; delete note.marketPricePct; delete note.marketPriceDate; }
   return note;
 }
 
@@ -3885,6 +3991,7 @@ function writeForm(note) {
   setVal("kiHit", note.kiHit ? "Y" : "N");
   setDate("firstCallDate", note.firstCallDate);
   currentValuation = note.valuation || null;
+  currentYouVsBank = note.youVsBank || null;
   document.getElementById("underlyingRows").innerHTML = "";
   (note.basket && note.basket.length ? note.basket : [{ ticker: "", initialFixing: 100 }])
     .forEach(function (b) { addUnderlyingRow(b.ticker, b.initialFixing, b); });
