@@ -3814,6 +3814,9 @@ function addUnderlyingRow(ticker, initialFixing, overrides) {
     '<td><input type="number" class="row-input spot-input" min="0" step="any" inputmode="decimal" placeholder="e.g. 125.53"></td>' +
     '<td><input type="number" class="row-input vol-input" min="1" max="300" step="0.1" inputmode="decimal" placeholder="40"></td>' +
     '<td><button type="button" class="mini-btn danger remove-btn">Remove</button></td>';
+  tr.querySelector(".ticker-input").value = ticker || "";
+  tr.querySelector(".fixing-input").value = initialFixing == null ? 100 : initialFixing;
+  tr.querySelector(".fixing-input").addEventListener("input", recomputeBasketPrices);
   tr.querySelector(".spot-input").value = overrides && overrides.spotPrice > 0 ? overrides.spotPrice : "";
   tr.querySelector(".vol-input").value = overrides && overrides.volPct > 0 ? overrides.volPct : "";
   BASKET_PRICE_FIELDS.forEach(function (f) {
@@ -4088,6 +4091,33 @@ function renderEditorResults() {
   document.getElementById("resultsPanel").style.display = "block";
 }
 
+// A note's saved underlyings must not be wiped by saving an empty basket.
+function basketLossWarning(saved, note) {
+  if (note.instrument === "BOND" || note.instrument === "FUND") return "";
+  const had = (saved && saved.basket || []).length, has = (note.basket || []).length;
+  if (had && !has) {
+    return "The underlying basket is empty, but the saved note has " + had + " underlying" + (had === 1 ? "" : "s") +
+      " (tickers and initial prices). Saving now will erase " + (had === 1 ? "it" : "them") + ". Save anyway?";
+  }
+  return "";
+}
+
+// Calculate automatically a moment after the underlyings' prices are typed in.
+let autoCalcTimer = null;
+function scheduleAutoCalculate() {
+  clearTimeout(autoCalcTimer);
+  autoCalcTimer = setTimeout(autoCalculate, 800);
+}
+
+function autoCalculate() {
+  if (isBondForm() || isFundForm() || formDateProblem()) return;
+  const basket = readBasket();
+  if (!basket.length || !basket.every(function (b) { return b.initialFixing > 0; })) return;
+  const note = readForm();
+  if (!(note.notional > 0)) return;
+  renderEditorResults();
+}
+
 function saveCurrentNote() {
   const dateProblem = formDateProblem();
   if (dateProblem) {
@@ -4102,6 +4132,8 @@ function saveCurrentNote() {
   }
   const notes = loadNotes();
   const idx = notes.findIndex(function (n) { return n.id === note.id; });
+  if (idx >= 0 && basketLossWarning(notes[idx], note) &&
+      !confirm(basketLossWarning(notes[idx], note))) return;
   if (idx >= 0) notes[idx] = note; else notes.push(note);
   saveNotes(notes);
   currentEditId = note.id;
@@ -4160,9 +4192,30 @@ function downloadBook(name, text) {
   URL.revokeObjectURL(a.href);
 }
 
+// For the backup file: each FCN also lists its tickers and initial prices in plain view (the "basket" holds the same,
+// plus current prices and volatilities).
+function notesForBackup(notes) {
+  return notes.map(function (n) {
+    if (n.instrument === "BOND" || n.instrument === "FUND" || !(n.basket && n.basket.length)) return n;
+    const prices = {};
+    n.basket.forEach(function (u) { prices[u.ticker] = u.initialFixing; });
+    return Object.assign({}, n, { initialPrices: prices });
+  });
+}
+
+// On import: a note with no basket but an initialPrices list gets its basket rebuilt from it.
+function notesFromBackup(parsed) {
+  return parsed.map(function (n) {
+    if (n && n.initialPrices && typeof n.initialPrices === "object" && !(n.basket && n.basket.length)) {
+      n.basket = Object.keys(n.initialPrices).map(function (t) { return { ticker: t, initialFixing: Number(n.initialPrices[t]) || 0 }; });
+    }
+    return n;
+  });
+}
+
 function exportBook() {
   const name = "fcn-book-" + formatDate(new Date()) + ".json";
-  const text = JSON.stringify(loadNotes(), null, 2);
+  const text = JSON.stringify(notesForBackup(loadNotes()), null, 2);
   // Native iPad app: a web view cannot download files, so ask the app to open the share sheet.
   try {
     if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.exportFile) {
@@ -4191,7 +4244,7 @@ function importBook(file) {
   reader.onload = function () {
     try {
       const parsed = JSON.parse(reader.result);
-      if (Array.isArray(parsed)) { saveNotes(parsed); markExported(); renderPortfolio(); }
+      if (Array.isArray(parsed)) { saveNotes(notesFromBackup(parsed)); markExported(); renderPortfolio(); }
     } catch (e) { /* ignore malformed file */ }
   };
   reader.readAsText(file);
@@ -4264,6 +4317,10 @@ document.addEventListener("DOMContentLoaded", function () {
   document.getElementById("exportBtn").addEventListener("click", exportBook);
   document.getElementById("fxRefreshBtn").addEventListener("click", refreshFxRates);
   document.getElementById("valuationBtn").addEventListener("click", updateValuations);
+  document.getElementById("underlyingRows").addEventListener("input", function (e) {
+    const c = e.target.classList;
+    if (c && (c.contains("fixing-input") || c.contains("spot-input") || c.contains("vol-input") || c.contains("ticker-input"))) scheduleAutoCalculate();
+  });
   ["issueDate", "settlementDate", "maturityDate"].forEach(function (id) {
     document.getElementById(id).addEventListener("input", updateTenorFromDates);
   });
